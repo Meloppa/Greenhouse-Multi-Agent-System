@@ -1,422 +1,399 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, Bell, Inbox, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Send, Sprout, Thermometer, Droplet, Lightbulb, Wind, Activity, Lock, AlertCircle } from 'lucide-react';
+
+// Allowed greenhouse-only topics (restrict off-topic chat)
+const SYSTEM_COMMANDS = [
+  { cmd: '/status',     desc: 'Full greenhouse status report' },
+  { cmd: '/temp',       desc: 'Current air temperature' },
+  { cmd: '/humidity',   desc: 'Current humidity reading' },
+  { cmd: '/soil',       desc: 'Soil moisture level' },
+  { cmd: '/light',      desc: 'Light intensity (lux)' },
+  { cmd: '/tasks',      desc: 'Today\'s agri task list' },
+  { cmd: '/pump_on',    desc: 'Manually activate water pump' },
+  { cmd: '/pump_off',   desc: 'Deactivate water pump' },
+  { cmd: '/fan_on',     desc: 'Activate ventilation fan' },
+  { cmd: '/fan_off',    desc: 'Deactivate ventilation fan' },
+  { cmd: '/lights_on',  desc: 'Turn on grow lights' },
+  { cmd: '/lights_off', desc: 'Turn off grow lights' },
+];
+
+const RESTRICTED_KEYWORDS = ['joke', 'story', 'movie', 'song', 'weather outside', 'news', 'recipe', 'math', 'code', 'write me', 'tell me about', 'who is', 'what is love', 'play'];
+
+function isOffTopic(msg) {
+  const lower = msg.toLowerCase();
+  return RESTRICTED_KEYWORDS.some(kw => lower.includes(kw));
+}
 
 export default function ChatDrawer({ chatHistory, alertsHistory, onSendChatMessage }) {
-  const [activePane, setActivePane] = useState('chat'); // 'chat' or 'alerts'
-  const [inputMsg, setInputMsg] = useState('');
-  const chatEndRef = useRef(null);
-  const prevLengthRef = useRef(chatHistory.length);
-  const prevPaneRef = useRef(activePane);
+  const [inputMsg, setInputMsg]   = useState('');
+  const [blocked, setBlocked]     = useState(null); // stores blocked message text
+  const chatEndRef                = useRef(null);
+  const prevLengthRef             = useRef(chatHistory.length);
 
   useEffect(() => {
-    const chatAppended = chatHistory.length > prevLengthRef.current;
-    const tabSwappedToChat = activePane === 'chat' && prevPaneRef.current !== 'chat';
-
-    if (chatAppended || tabSwappedToChat) {
-      setTimeout(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
+    if (chatHistory.length > prevLengthRef.current) {
+      setTimeout(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, 50);
     }
     prevLengthRef.current = chatHistory.length;
-    prevPaneRef.current = activePane;
-  }, [chatHistory.length, activePane]);
+  }, [chatHistory.length]);
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!inputMsg.trim()) return;
-    
-    const msg = inputMsg;
+    const msg = inputMsg.trim();
+    if (!msg) return;
+
+    // Off-topic restriction
+    if (isOffTopic(msg)) {
+      setBlocked(msg);
+      setInputMsg('');
+      return;
+    }
+    setBlocked(null);
     setInputMsg('');
     await onSendChatMessage(msg);
   };
 
-  const getAlertIcon = (type) => {
-    if (type === 'Telegram') return { icon: MessageSquare, bg: '#EFF6FF', color: '#3B82F6' };
-    if (type === 'Email') return { icon: Inbox, bg: '#FDF2F8', color: '#DB2777' };
-    return { icon: AlertTriangle, bg: '#FEF3C7', color: '#D97706' };
+  const quickSend = (cmd) => {
+    setBlocked(null);
+    setInputMsg('');
+    onSendChatMessage(cmd);
   };
 
   return (
-    <div style={styles.card}>
-      {/* Pane Switches */}
-      <div style={styles.tabRow}>
-        <button
-          onClick={() => setActivePane('chat')}
-          style={{
-            ...styles.paneBtn,
-            ...(activePane === 'chat' ? styles.paneBtnActive : {})
-          }}
-        >
-          <MessageSquare size={14} />
-          <span>Telegram Chatbot</span>
-        </button>
-        <button
-          onClick={() => setActivePane('alerts')}
-          style={{
-            ...styles.paneBtn,
-            ...(activePane === 'alerts' ? styles.paneBtnActive : {})
-          }}
-        >
-          <Bell size={14} />
-          <span>Alerts Logs ({alertsHistory.length})</span>
-        </button>
+    <div style={s.shell}>
+
+      {/* ── LEFT: System Chatbot ── */}
+      <div style={s.chatPanel}>
+
+        {/* Header */}
+        <div style={s.panelHeader}>
+          <div style={s.botAvatarSmall}><Sprout size={16} color="#fff" /></div>
+          <div>
+            <div style={s.panelTitle}>Greenhouse System Assistant</div>
+            <div style={s.panelSub}>Restricted to greenhouse queries only</div>
+          </div>
+          <div style={s.restrictedBadge}><Lock size={10} /><span>System Only</span></div>
+        </div>
+
+        {/* Chat log */}
+        <div style={s.chatLog}>
+
+          {/* Welcome message */}
+          {chatHistory.length === 0 && (
+            <div style={s.welcomeCard}>
+              <div style={s.welcomeAvatar}><Sprout size={22} color="#fff" /></div>
+              <p style={s.welcomeText}>
+                👋 Hi! I'm your <strong>Greenhouse AI Assistant</strong>.<br />
+                I can only answer questions about your greenhouse system.<br />
+                Use the command chips below or type a query.
+              </p>
+            </div>
+          )}
+
+          {/* Message bubbles */}
+          {chatHistory.map((chat, idx) => {
+            const isBot = chat.sender === 'Bot';
+            return (
+              <div key={idx} style={{ ...s.msgRow, justifyContent: isBot ? 'flex-start' : 'flex-end' }}>
+                {isBot && <div style={s.botDot}><Sprout size={11} color="#fff" /></div>}
+                <div style={isBot ? s.botBubble : s.userBubble}>
+                  <p style={{ ...s.msgText, color: isBot ? '#0F172A' : '#fff' }}>{chat.message}</p>
+                  <span style={{ ...s.ts, color: isBot ? '#94A3B8' : 'rgba(255,255,255,0.6)' }}>{chat.timestamp}</span>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Off-topic block notice */}
+          {blocked && (
+            <div style={s.blockedBanner}>
+              <AlertCircle size={14} color="#D97706" />
+              <span>❌ Off-topic blocked: "<em>{blocked}</em>". I only handle greenhouse system queries.</span>
+            </div>
+          )}
+
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Quick command chips */}
+        <div style={s.chips}>
+          {['/status', '/temp', '/humidity', '/soil', '/pump_on', '/fan_on', '/tasks'].map(cmd => (
+            <button key={cmd} onClick={() => quickSend(cmd)} style={s.chip}>{cmd}</button>
+          ))}
+        </div>
+
+        {/* Input */}
+        <form onSubmit={handleSend} style={s.inputRow}>
+          <input
+            type="text"
+            value={inputMsg}
+            onChange={e => setInputMsg(e.target.value)}
+            placeholder="Ask about your greenhouse… (/status, /tasks)"
+            style={s.input}
+          />
+          <button type="submit" style={s.sendBtn}><Send size={14} color="#fff" /></button>
+        </form>
       </div>
 
-      {activePane === 'chat' ? (
-        /* Chatbot Panel */
-        <div style={styles.chatWrapper}>
-          <div style={styles.chatLogs}>
-            {chatHistory.map((chat, idx) => {
-              const isBot = chat.sender === 'Bot';
-              const isSys = chat.sender === 'System';
-              
-              let bubbleStyle = styles.userBubble;
-              let alignStyle = styles.userAlign;
-              let textStyle = styles.userText;
-              
-              if (isBot) {
-                bubbleStyle = styles.botBubble;
-                alignStyle = styles.botAlign;
-                textStyle = styles.botText;
-              } else if (isSys) {
-                bubbleStyle = styles.sysBubble;
-                alignStyle = styles.sysAlign;
-                textStyle = styles.sysText;
-              }
-
-              return (
-                <div key={idx} style={{ ...styles.msgRow, ...alignStyle }}>
-                  <span style={styles.senderLabel}>
-                    {isBot ? '🤖 Plant Guardian Bot' : isSys ? '📢 System Alert' : '👤 You'}
-                  </span>
-                  <div style={bubbleStyle}>
-                    <p style={{ ...styles.msgText, ...textStyle }}>{chat.message}</p>
-                  </div>
-                  <span style={styles.timestamp}>{chat.timestamp}</span>
-                </div>
-              );
-            })}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Quick command suggestions */}
-          <div style={styles.suggestions}>
-            <button onClick={() => setInputMsg('/status')} style={styles.sugBtn}>/status</button>
-            <button onClick={() => setInputMsg('/tasks')} style={styles.sugBtn}>/tasks</button>
-            <button onClick={() => setInputMsg('/pump_on')} style={styles.sugBtn}>/pump_on</button>
-            <button onClick={() => setInputMsg('/fan_on')} style={styles.sugBtn}>/fan_on</button>
-          </div>
-
-          {/* Input box */}
-          <form onSubmit={handleSend} style={styles.inputForm}>
-            <input
-              type="text"
-              value={inputMsg}
-              onChange={(e) => setInputMsg(e.target.value)}
-              placeholder="Text greenhouse chatbot (/status, /tasks)..."
-              style={styles.chatInput}
-            />
-            <button type="submit" style={styles.sendBtn}>
-              <Send size={14} color="#FFFFFF" />
-            </button>
-          </form>
+      {/* ── RIGHT: Available Commands ── */}
+      <div style={s.commandsPanel}>
+        <div style={s.panelTitle} style2={{ marginBottom: 8 }}>Available Commands</div>
+        <p style={s.commandsDesc}>These are the only queries this assistant handles. The same commands work in Telegram (@melmalebot) remotely.</p>
+        <div style={s.commandList}>
+          {SYSTEM_COMMANDS.map(c => (
+            <div key={c.cmd} style={s.commandRow} onClick={() => quickSend(c.cmd)}>
+              <code style={s.cmdCode}>{c.cmd}</code>
+              <span style={s.cmdDesc}>{c.desc}</span>
+            </div>
+          ))}
         </div>
-      ) : (
-        /* Alerts Notification History Logs */
-        <div style={styles.alertsWrapper}>
-          <div style={styles.alertsList}>
-            {alertsHistory.map((alert, idx) => {
-              const config = getAlertIcon(alert.type);
-              const Icon = config.icon;
-              return (
-                <div key={idx} style={styles.alertCard}>
-                  <div style={{ ...styles.alertIconCircle, backgroundColor: config.bg }}>
-                    <Icon size={14} color={config.color} />
-                  </div>
-                  <div style={styles.alertDetails}>
-                    <div style={styles.alertTitleRow}>
-                      <span style={styles.alertSubject}>{alert.subject}</span>
-                      <span style={styles.alertTime}>{alert.timestamp}</span>
-                    </div>
-                    <p style={styles.alertBody}>{alert.body}</p>
-                    <span style={{ ...styles.alertTypeTag, color: config.color }}>
-                      via {alert.type} Service
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+      </div>
 
-            {alertsHistory.length === 0 && (
-              <div style={styles.emptyAlerts}>
-                <Inbox size={32} color="#94A3B8" />
-                <h4 style={styles.emptyAlertsTitle}>No Alerts Fired</h4>
-                <p style={styles.emptyAlertsDesc}>
-                  Environmental thresholds are operating within stable limits. You will see warning logs here if readings cross thresholds.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-const styles = {
-  card: {
-    backgroundColor: 'var(--color-bg-card)',
-    border: '1px solid var(--color-border)',
-    borderRadius: '20px',
-    padding: '20px',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.01)',
+const s = {
+  shell: {
+    display: 'flex',
+    gap: 16,
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+  },
+  // Chat panel
+  chatPanel: {
+    flex: '2 1 420px',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    border: '1px solid #E2E8F0',
     display: 'flex',
     flexDirection: 'column',
-    height: '420px',
-    transition: 'background-color 0.2s, border 0.2s'
+    height: 520,
+    overflow: 'hidden',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
   },
-  tabRow: {
-    display: 'flex',
-    gap: '8px',
-    borderBottom: '1px solid var(--color-border)',
-    padding: 'bottom 12px',
-    marginBottom: '12px',
-    transition: 'border 0.2s'
-  },
-  paneBtn: {
+  panelHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    padding: '8px 14px',
-    border: 'none',
-    borderRadius: '10px',
-    backgroundColor: 'transparent',
-    color: 'var(--color-text-muted)',
-    fontSize: '12px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
+    gap: 10,
+    padding: '14px 16px',
+    borderBottom: '1px solid #F1F5F9',
+    flexShrink: 0,
   },
-  paneBtnActive: {
-    backgroundColor: 'var(--color-primary-light)',
-    color: 'var(--color-primary)'
+  botAvatarSmall: {
+    width: 34, height: 34,
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg,#7C3AED,#A855F7)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
-  chatWrapper: {
-    display: 'flex',
-    flexDirection: 'column',
-    flex: 1,
-    overflow: 'hidden'
+  panelTitle: {
+    fontSize: 14,
+    fontWeight: 800,
+    color: '#0F172A',
+    fontFamily: "'Outfit', sans-serif",
   },
-  chatLogs: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
+  panelSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  restrictedBadge: {
+    marginLeft: 'auto',
+    display: 'flex', alignItems: 'center', gap: 4,
+    backgroundColor: '#FEF3C7',
+    color: '#D97706',
+    fontSize: 10,
+    fontWeight: 700,
+    padding: '4px 8px',
+    borderRadius: 20,
+    border: '1px solid #FCD34D',
+  },
+
+  chatLog: {
     flex: 1,
     overflowY: 'auto',
-    paddingRight: '6px',
-    marginBottom: '8px'
+    padding: '14px 14px 6px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 10,
   },
+
+  welcomeCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 10,
+    padding: '20px 16px',
+    backgroundColor: '#F5F3FF',
+    borderRadius: 16,
+    margin: '8px 0',
+  },
+  welcomeAvatar: {
+    width: 52, height: 52,
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg,#7C3AED,#A855F7)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 6px 16px rgba(124,58,237,0.25)',
+  },
+  welcomeText: {
+    fontSize: 13,
+    color: '#475569',
+    textAlign: 'center',
+    lineHeight: 1.6,
+    margin: 0,
+  },
+
   msgRow: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '3px',
-    maxWidth: '85%'
+    alignItems: 'flex-end',
+    gap: 8,
   },
-  userAlign: {
-    alignSelf: 'flex-end',
-    alignItems: 'flex-end'
-  },
-  botAlign: {
-    alignSelf: 'flex-start',
-    alignItems: 'flex-start'
-  },
-  sysAlign: {
-    alignSelf: 'center',
-    alignItems: 'center',
-    maxWidth: '95%'
-  },
-  senderLabel: {
-    fontSize: '9px',
-    fontWeight: '700',
-    color: 'var(--color-text-muted)',
-    textTransform: 'uppercase',
-    transition: 'color 0.2s'
-  },
-  userBubble: {
-    backgroundColor: 'var(--color-primary)',
-    borderRadius: '14px 14px 2px 14px',
-    padding: '10px 14px'
+  botDot: {
+    width: 24, height: 24,
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg,#7C3AED,#A855F7)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
   },
   botBubble: {
-    backgroundColor: 'var(--color-bg-base)',
-    borderRadius: '14px 14px 14px 2px',
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #E2E8F0',
+    borderRadius: '16px 16px 16px 4px',
     padding: '10px 14px',
-    transition: 'background-color 0.2s'
+    maxWidth: '75%',
   },
-  sysBubble: {
-    backgroundColor: 'var(--color-warning-light)',
-    border: '1px solid var(--color-warning)',
-    borderRadius: '10px',
-    padding: '6px 12px',
-    transition: 'all 0.2s'
+  userBubble: {
+    backgroundColor: '#7C3AED',
+    borderRadius: '16px 16px 4px 16px',
+    padding: '10px 14px',
+    maxWidth: '75%',
   },
   msgText: {
-    fontSize: '12.5px',
-    lineHeight: '1.4',
-    whiteSpace: 'pre-line'
+    fontSize: 13,
+    lineHeight: 1.5,
+    margin: 0,
+    whiteSpace: 'pre-line',
   },
-  userText: {
-    color: '#FFFFFF'
+  ts: {
+    fontSize: 9,
+    display: 'block',
+    marginTop: 4,
+    fontWeight: 600,
   },
-  botText: {
-    color: 'var(--color-text-body)',
-    transition: 'color 0.2s'
-  },
-  sysText: {
-    color: 'var(--color-warning)',
-    fontSize: '11px',
-    fontWeight: '600',
-    transition: 'color 0.2s'
-  },
-  timestamp: {
-    fontSize: '9px',
-    color: 'var(--color-text-muted)',
-    transition: 'color 0.2s'
-  },
-  suggestions: {
+
+  blockedBanner: {
     display: 'flex',
-    gap: '4px',
-    padding: '4px 0',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    border: '1px solid #FCD34D',
+    borderRadius: 10,
+    padding: '10px 12px',
+    fontSize: 12,
+    color: '#92400E',
+    lineHeight: 1.4,
+  },
+
+  chips: {
+    display: 'flex',
+    gap: 6,
+    padding: '8px 14px',
     overflowX: 'auto',
-    marginBottom: '8px'
-  },
-  sugBtn: {
-    padding: '4px 10px',
-    backgroundColor: 'var(--color-bg-base)',
-    border: '1px solid var(--color-border)',
-    borderRadius: '6px',
-    color: 'var(--color-text-muted)',
-    fontSize: '11px',
-    fontWeight: '600',
-    cursor: 'pointer',
+    borderTop: '1px solid #F1F5F9',
     flexShrink: 0,
-    transition: 'all 0.2s'
   },
-  inputForm: {
+  chip: {
+    padding: '5px 10px',
+    backgroundColor: '#EDE9FF',
+    border: 'none',
+    borderRadius: 20,
+    fontSize: 11,
+    fontWeight: 700,
+    color: '#7C3AED',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
+
+  inputRow: {
     display: 'flex',
-    gap: '8px',
-    alignItems: 'center'
+    gap: 8,
+    padding: '10px 14px 14px',
+    flexShrink: 0,
   },
-  chatInput: {
+  input: {
     flex: 1,
-    height: '38px',
-    backgroundColor: 'var(--color-bg-base)',
-    border: '1px solid var(--color-border)',
-    borderRadius: '10px',
-    padding: '0 12px',
-    fontSize: '12px',
-    fontWeight: '500',
+    height: 40,
+    borderRadius: 12,
+    border: '1px solid #E2E8F0',
+    padding: '0 14px',
+    fontSize: 13,
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC',
     outline: 'none',
-    color: 'var(--color-text-body)',
-    transition: 'all 0.2s'
+    fontFamily: 'inherit',
   },
   sendBtn: {
-    width: '38px',
-    height: '38px',
-    borderRadius: '10px',
-    backgroundColor: 'var(--color-primary)',
+    width: 40, height: 40,
+    borderRadius: 12,
     border: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#7C3AED',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer',
-    boxShadow: '0 2px 6px rgba(124,58,237,0.2)',
-    transition: 'all 0.2s'
+    boxShadow: '0 4px 10px rgba(124,58,237,0.25)',
+    flexShrink: 0,
   },
-  alertsWrapper: {
+
+  // Commands reference panel
+  commandsPanel: {
+    flex: '1 1 240px',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    border: '1px solid #E2E8F0',
+    padding: '18px 16px',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.05)',
     display: 'flex',
     flexDirection: 'column',
-    flex: 1,
-    overflowY: 'auto'
+    gap: 10,
+    maxHeight: 520,
+    overflowY: 'auto',
   },
-  alertsList: {
+  commandsDesc: {
+    fontSize: 11,
+    color: '#94A3B8',
+    lineHeight: 1.5,
+    margin: 0,
+  },
+  commandList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: 4,
   },
-  alertCard: {
-    display: 'flex',
-    gap: '12px',
-    padding: '12px',
-    border: '1px solid var(--color-border)',
-    borderRadius: '14px',
-    backgroundColor: 'var(--color-bg-base)',
-    transition: 'all 0.2s'
-  },
-  alertIconCircle: {
-    width: '28px',
-    height: '28px',
-    borderRadius: '8px',
+  commandRow: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0
+    gap: 10,
+    padding: '8px 10px',
+    borderRadius: 10,
+    cursor: 'pointer',
+    transition: 'background 0.15s',
+    backgroundColor: 'transparent',
   },
-  alertDetails: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    flex: 1
+  cmdCode: {
+    fontSize: 11,
+    fontWeight: 800,
+    color: '#7C3AED',
+    backgroundColor: '#EDE9FF',
+    padding: '3px 8px',
+    borderRadius: 6,
+    fontFamily: "'Courier New', monospace",
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
   },
-  alertTitleRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+  cmdDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    lineHeight: 1.3,
   },
-  alertSubject: {
-    fontSize: '12px',
-    fontWeight: '700',
-    color: 'var(--color-text-title)',
-    transition: 'color 0.2s'
-  },
-  alertTime: {
-    fontSize: '9px',
-    color: 'var(--color-text-muted)',
-    transition: 'color 0.2s'
-  },
-  alertBody: {
-    fontSize: '11px',
-    color: 'var(--color-text-body)',
-    lineHeight: '1.4',
-    transition: 'color 0.2s'
-  },
-  alertTypeTag: {
-    fontSize: '9px',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginTop: '2px'
-  },
-  emptyAlerts: {
-    margin: 'auto',
-    textAlign: 'center',
-    padding: '40px 20px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '8px',
-    maxWidth: '280px'
-  },
-  emptyAlertsTitle: {
-    fontSize: '13px',
-    fontWeight: '700',
-    color: 'var(--color-text-body)',
-    fontFamily: "'Outfit', sans-serif",
-    transition: 'color 0.2s'
-  },
-  emptyAlertsDesc: {
-    fontSize: '10.5px',
-    color: 'var(--color-text-muted)',
-    lineHeight: '1.4',
-    transition: 'color 0.2s'
-  }
 };

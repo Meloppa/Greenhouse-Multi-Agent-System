@@ -31,19 +31,26 @@ MODEL_CHOICES = {
     }
 }
 
+from app.config import VISION_MODEL, EXPERT_MODEL, SCHEDULER_MODEL
+
 # Load chosen model from .env with fallback
-DEFAULT_MODEL = os.getenv("SELECTED_MODEL", "qwen3-vl-4b")
+DEFAULT_MODEL = os.getenv("SELECTED_MODEL", EXPERT_MODEL)
 if DEFAULT_MODEL not in MODEL_CHOICES:
-    DEFAULT_MODEL = "qwen3-vl-4b"
+    DEFAULT_MODEL = EXPERT_MODEL if EXPERT_MODEL in MODEL_CHOICES else "qwen3-vl-4b"
 
 # Active state tracking (global fallback model)
 _current_active_model = DEFAULT_MODEL
 
+# Validate individual agent model configurations
+final_vision = VISION_MODEL if VISION_MODEL in MODEL_CHOICES else "qwen3-vl-4b"
+final_expert = EXPERT_MODEL if EXPERT_MODEL in MODEL_CHOICES else "gemma3-1b"
+final_scheduler = SCHEDULER_MODEL if SCHEDULER_MODEL in MODEL_CHOICES else "llama3.2-1b"
+
 # Agent-Specific Model Bindings (Each agent powered by a custom model)
 _agent_bindings = {
-    "vision": "qwen3-vl-4b",     # Diagnostics Agent (VLM required for leaf visual scans)
-    "expert": "gemma3-1b",       # Plant Expert Agent
-    "scheduler": "llama3.2-1b"   # Task-Scheduler Agent
+    "vision": final_vision,       # Diagnostics Agent (VLM required for leaf visual scans)
+    "expert": final_expert,       # Plant Expert Agent
+    "scheduler": final_scheduler   # Task-Scheduler Agent
 }
 
 def get_active_model() -> str:

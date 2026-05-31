@@ -207,6 +207,9 @@ class TelegramBotService:
                         if not text or not chat_id:
                             continue
                             
+                        # Store last seen chat ID dynamically
+                        global_state.last_seen_chat_id = str(chat_id)
+
                         # Standardize name
                         from_user = message.get("from", {})
                         username = from_user.get("first_name", "User")

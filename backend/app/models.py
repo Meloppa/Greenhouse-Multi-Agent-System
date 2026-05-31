@@ -56,6 +56,7 @@ class SystemState(BaseModel):
     chat_history: List[ChatMessage] = Field(default_factory=list)
     alerts_history: List[AlertNotification] = Field(default_factory=list)
     diagnostics_history: List[Dict[str, Any]] = Field(default_factory=list)
+    last_seen_chat_id: Optional[str] = None
 
 # Global State Container
 global_state = SystemState()

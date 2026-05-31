@@ -18,7 +18,7 @@ from app.agents.actuator import ActuatorControlAgent
 from app.services.telegram_bot import TelegramBotService
 from app.services.email_service import EmailService
 from app.model_config import get_active_model, get_all_models, set_active_model, get_agent_bindings, set_agent_binding
-from app.config import SUPABASE_URL, SUPABASE_KEY, IS_SUPABASE_CONFIGURED
+from app.config import SUPABASE_URL, SUPABASE_KEY, IS_SUPABASE_CONFIGURED, IS_TELEGRAM_CONFIGURED, TELEGRAM_CHAT_ID
 import threading
 import requests
 
@@ -33,7 +33,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -57,6 +57,34 @@ async def get_system_status():
         global_state.age_days
     )
     
+    # Check if Ollama is running and get installed models
+    ollama_connected = False
+    ollama_models = []
+    try:
+        r = requests.get("http://127.0.0.1:11434/api/tags", timeout=0.5)
+        if r.status_code == 200:
+            ollama_connected = True
+            ollama_models = [m["name"] for m in r.json().get("models", [])]
+    except Exception:
+        pass
+    
+    # Helper to check if model matches installed models
+    def is_installed(model_name: str) -> bool:
+        normalized = model_name.replace("-", ":").lower()
+        for m in ollama_models:
+            m_lower = m.lower()
+            if normalized in m_lower or m_lower in normalized:
+                return True
+            # Check base name (e.g. qwen3-vl vs qwen3-vl:4b)
+            base_sel = model_name.split("-")[0].lower()
+            base_m = m.split(":")[0].lower()
+            if base_sel == base_m:
+                return True
+        return False
+
+    active_model = get_active_model()
+    active_model_installed = is_installed(active_model) if ollama_connected else False
+    
     return {
         "current_plant": global_state.current_plant,
         "growth_stage": global_state.growth_stage,
@@ -69,9 +97,16 @@ async def get_system_status():
         "alerts_history": global_state.alerts_history,
         "diagnostics_history": global_state.diagnostics_history,
         "tasks": daily_tasks,
-        "active_model": get_active_model(),
+        "active_model": active_model,
         "agent_bindings": get_agent_bindings(),
-        "models": get_all_models()
+        "models": get_all_models(),
+        "ollama_connected": ollama_connected,
+        "ollama_models": ollama_models,
+        "active_model_installed": active_model_installed,
+        "is_supabase_configured": IS_SUPABASE_CONFIGURED,
+        "is_telegram_configured": IS_TELEGRAM_CONFIGURED,
+        "telegram_chat_id_set": bool(TELEGRAM_CHAT_ID and TELEGRAM_CHAT_ID != "your_chat_id_here"),
+        "last_seen_chat_id": global_state.last_seen_chat_id
     }
 
 @app.post("/api/model/select")
@@ -239,15 +274,78 @@ async def upload_leaf_image(file: UploadFile = File(...)):
     contents = await file.read()
     file_size = len(contents)
     
-    # Execute Diagnostics Agent
-    report = DiagnosticsAgent.analyze_leaf_photo(file.filename, file_size)
+    # 1. Try real vision analysis using Ollama if connected and model is vision-capable
+    from app.model_config import get_agent_bindings
+    active_vision_model = get_agent_bindings().get("vision", "qwen3-vl-4b")
+    normalized = active_vision_model.replace("-", ":").lower()
+    
+    report = None
+    try:
+        r_tags = requests.get("http://127.0.0.1:11434/api/tags", timeout=0.5)
+        if r_tags.status_code == 200:
+            models = [m["name"] for m in r_tags.json().get("models", [])]
+            matching_model = None
+            for m in models:
+                m_lower = m.lower()
+                if normalized in m_lower or m_lower in normalized or active_vision_model.split("-")[0].lower() in m_lower:
+                    matching_model = m
+                    break
+                    
+            if matching_model:
+                import base64
+                import json
+                image_b64 = base64.b64encode(contents).decode("utf-8")
+                url = "http://127.0.0.1:11434/api/chat"
+                payload = {
+                    "model": matching_model,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                "Analyze this greenhouse leaf photo and diagnose any plant disease. "
+                                "Respond ONLY in a valid JSON matching this schema exactly, and do not include any markdown backticks outside of the raw json block:\n"
+                                "{\n"
+                                "  \"status\": \"Infected\" or \"Healthy\",\n"
+                                "  \"diagnosis\": \"disease name / Healthy Leaf Tissues\",\n"
+                                "  \"severity\": \"High/Medium/Low/None\",\n"
+                                "  \"confidence\": 95.0,\n"
+                                "  \"symptoms\": \"visible spots, dust coating, or fine web markings\",\n"
+                                "  \"urgent_action\": \"ventilation adjustment, pruning, or isolation\",\n"
+                                "  \"organic_treatment\": \"neem oil or potassium bicarbonate\",\n"
+                                "  \"chemical_treatment\": \"sulfur or organic fungicides\"\n"
+                                "}"
+                            ),
+                            "images": [image_b64]
+                        }
+                    ],
+                    "options": {"temperature": 0.2},
+                    "stream": False,
+                    "format": "json"
+                }
+                # Timeout of 15s for vision inference
+                res = requests.post(url, json=payload, timeout=15)
+                if res.status_code == 200:
+                    raw_content = res.json().get("message", {}).get("content", "").strip()
+                    parsed = json.loads(raw_content)
+                    report = {
+                        "filename": file.filename,
+                        "file_size_kb": round(file_size / 1024, 1),
+                        "processed_by_model": matching_model,
+                        **parsed
+                    }
+    except Exception as e:
+        print(f"[Ollama Vision Fallback]: {str(e)}")
+        
+    if not report:
+        # Fallback to simulation
+        report = DiagnosticsAgent.analyze_leaf_photo(file.filename, file_size)
     
     # Append report to diagnostic history queue
     report["timestamp"] = datetime.now().strftime("%b %d, %I:%M %p")
     global_state.diagnostics_history.insert(0, report)
     
     # Send telegram notification if diseased
-    if report["status"] == "Infected":
+    if report.get("status") == "Infected":
         alert_msg = f"🏥 *DISEASE DETECTED* 🏥\nLeaf Photo: {report['filename']}\nDiagnosis: {report['diagnosis']}\nSeverity: {report['severity']}\nOrganic Cure: {report['organic_treatment']}"
         TelegramBotService.send_alert(alert_msg)
         EmailService.send_alert(f"DISEASE DETECTED: {report['diagnosis']}", alert_msg.replace("*", ""))
@@ -271,8 +369,62 @@ async def send_chat_message(payload: Dict[str, str]):
     ))
     
     # Generate bot response
-    reply_text = TelegramBotService.process_incoming_message(msg_text)
+    reply_text = None
     
+    # 1. Try real Ollama chatbot query
+    from app.model_config import get_agent_bindings
+    active_expert_model = get_agent_bindings().get("expert", "gemma3-1b")
+    normalized = active_expert_model.replace("-", ":").lower()
+    
+    try:
+        r_tags = requests.get("http://127.0.0.1:11434/api/tags", timeout=0.5)
+        if r_tags.status_code == 200:
+            models = [m["name"] for m in r_tags.json().get("models", [])]
+            matching_model = None
+            for m in models:
+                m_lower = m.lower()
+                if normalized in m_lower or m_lower in normalized or active_expert_model.split("-")[0].lower() in m_lower:
+                    matching_model = m
+                    break
+                    
+            if matching_model:
+                url = "http://127.0.0.1:11434/api/chat"
+                system_prompt = (
+                    "You are Zentra Flora, an AI Greenhouse Expert. Your sole duty is to answer questions about the smart greenhouse, "
+                    "plants, crops, soil, pests, watering schedules, and sensor readings. "
+                    "If the user asks an off-topic question (not related to agriculture, plants, or the greenhouse), "
+                    "you must politely refuse to answer and remind them that you are restricted to greenhouse operations only. "
+                    "Keep your response concise, helpful, and highly agricultural."
+                )
+                payload = {
+                    "model": matching_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": msg_text}
+                    ],
+                    "options": {"temperature": 0.5},
+                    "stream": False
+                }
+                res = requests.post(url, json=payload, timeout=8)
+                if res.status_code == 200:
+                    reply_text = res.json().get("message", {}).get("content", "").strip()
+    except Exception as e:
+        print(f"[Ollama Chat Fallback]: {str(e)}")
+        
+    if not reply_text:
+        # Fallback to simulation
+        msg = msg_text.lower()
+        if "temp" in msg or "heat" in msg or "hot" in msg:
+            reply_text = "Keeping temperature within bounds is critical. Currently, targets are set per plant stage (e.g. 16-23°C for Fruiting Strawberries). If it gets too hot, the exhaust fan turns on automatically."
+        elif "water" in msg or "soil" in msg or "moisture" in msg or "pump" in msg:
+            reply_text = "Soil moisture target is set between 50% and 60% for optimal root intake. The water pump will trigger automatically if moisture falls below 50%."
+        elif "light" in msg or "lux" in msg:
+            reply_text = "Ambient light targets ensure optimal photosynthesis. The grow lights will supplement light if natural lux falls below target boundaries."
+        elif "pest" in msg or "disease" in msg or "mildew" in msg or "mite" in msg:
+            reply_text = "To inspect for diseases, upload a leaf photo in the Diagnostics tab. Our vision VLM scans for spider mites, powdery mildew, and leaf spots."
+        else:
+            reply_text = "I am your greenhouse agricultural expert. Ask me about your plants, target settings, schedules, or automatic actuators."
+            
     # Add Bot reply
     global_state.chat_history.append(ChatMessage(
         sender="Bot",
@@ -477,4 +629,49 @@ async def user_sign_in_login(payload: Dict[str, str]):
         "user": user_found,
         "telegram_link": "https://t.me/melmalebot"
     }
+
+
+@app.post("/api/telegram/save_chat_id")
+async def save_telegram_chat_id(payload: Dict[str, str]):
+    """Saves the Telegram Chat ID to the .env file and updates current state."""
+    chat_id = payload.get("chat_id")
+    if not chat_id:
+        raise HTTPException(status_code=400, detail="Chat ID is required")
+    
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if not os.path.exists(env_path):
+        env_path = os.path.abspath(".env")
+        
+    try:
+        lines = []
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            
+        chat_id_found = False
+        for idx, line in enumerate(lines):
+            if line.strip().startswith("TELEGRAM_CHAT_ID="):
+                lines[idx] = f"TELEGRAM_CHAT_ID={chat_id}\n"
+                chat_id_found = True
+                break
+                
+        if not chat_id_found:
+            lines.append(f"\nTELEGRAM_CHAT_ID={chat_id}\n")
+            
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+            
+        # Re-set in os.environ and config
+        os.environ["TELEGRAM_CHAT_ID"] = str(chat_id)
+        
+        import app.config as config
+        config.TELEGRAM_CHAT_ID = str(chat_id)
+        config.IS_TELEGRAM_CONFIGURED = True
+        
+        # Inject alert log of chat id update
+        from app.services.telegram_bot import TelegramBotService
+        TelegramBotService.send_alert(f"🤖 Telegram Bot Chat ID successfully configured to {chat_id}.")
+        
+        return {"status": "Success", "chat_id": chat_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update .env: {str(e)}")
 
