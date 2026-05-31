@@ -1,0 +1,10 @@
+import uvicorn
+import sys
+import os
+
+# Append current directory to path to ensure modules are correctly resolved
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+if __name__ == "__main__":
+    print("Initializing Zentra Flora Multi-Agent System on http://localhost:8000")
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
