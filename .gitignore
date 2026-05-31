@@ -9,6 +9,11 @@ ENV/
 # Sensitive files
 .env
 .env.*
+*.env
+backend/.env
+frontend/.env
+**/.*env*
+**/.env
 
 # Node modules
 node_modules/
