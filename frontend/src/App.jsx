@@ -472,6 +472,7 @@ export default function App() {
   };
 
   // Helper metric state counters
+  const sensors = data.sensors || { temperature: 24.5, humidity: 65, light: 450, soil_moisture: 42 };
   const totalTasks = data.tasks.length;
   const completedTasksCount = data.tasks.filter(t => t.completed).length;
   const tasksValue = totalTasks > 0 ? `${completedTasksCount}/${totalTasks}` : "0/0";
