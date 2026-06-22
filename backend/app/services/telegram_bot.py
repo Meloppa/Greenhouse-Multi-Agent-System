@@ -243,4 +243,3 @@ class TelegramBotService:
                 print(f"[Telegram Polling Loop Error]: {str(e)}")
                 time.sleep(5)
             time.sleep(1)
-stream = None

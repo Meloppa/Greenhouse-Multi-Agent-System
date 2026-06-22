@@ -75,7 +75,7 @@ export default function GrowthStage({
 
   return (
     <div className="zentra-card">
-      <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--color-text-title)', fontFamily: "'Outfit', sans-serif" }}>
+      <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--color-text-title)' }}>
         Plant Expert Reconfigurator
       </h3>
       

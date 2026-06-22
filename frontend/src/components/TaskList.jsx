@@ -25,7 +25,7 @@ export default function TaskList({ tasks, currentPlant, stage, ageDays }) {
     <div className="zentra-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--color-text-title)', fontFamily: "'Outfit', sans-serif" }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--color-text-title)' }}>
             Agri-Tasks (AI Scheduler Agent)
           </h3>
           <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: '500' }}>
@@ -34,7 +34,7 @@ export default function TaskList({ tasks, currentPlant, stage, ageDays }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--color-primary-light)', border: '1px solid var(--color-primary-medium)', borderRadius: '10px', padding: '6px 12px', fontSize: '11px', fontWeight: '700', color: 'var(--color-primary)' }}>
           <Calendar size={12} color="var(--color-primary)" />
-          <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Stage: {stage}</span>
+          <span>Stage: {stage}</span>
         </div>
       </div>
 

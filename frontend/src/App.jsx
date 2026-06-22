@@ -401,24 +401,44 @@ export default function App() {
 
             {/* Top row */}
             <div className="dashboard-row-top">
-              {/* Greenhouse hero image */}
+              {/* Greenhouse hero card — CSS gradient */}
               <div className="zentra-card" style={{ overflow: 'hidden', position: 'relative', minHeight: 220, padding: 0 }}>
-                <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 5, display: 'flex', gap: 6 }}>
-                  <span style={{ backgroundColor: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 20, backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                {/* Full green gradient background */}
+                <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, background: 'linear-gradient(145deg, #1a2e0a 0%, #2d5016 40%, #4a7c20 100%)' }}>
+                  {/* Subtle dot pattern */}
+                  <div style={{ position: 'absolute', inset: 0, opacity: 0.06, backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+                </div>
+                {/* Top-left: Live badge */}
+                <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 5 }}>
+                  <span style={{ backgroundColor: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 20, backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', gap: 5 }}>
                     <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#ef4444', animation: 'pulse-dot 1.5s infinite' }} />
                     Live
                   </span>
                 </div>
-                <img src="/greenhouse_hero.png" alt="Greenhouse" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', position: 'absolute', top: 0, left: 0 }} />
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 5, background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 100%)', padding: '24px 16px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{data.current_plant}</div>
-                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>{data.growth_stage} phase · Day {data.age_days}</div>
-                    </div>
-                    <span style={{ backgroundColor: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20, backdropFilter: 'blur(6px)' }}>
-                      {data.ollama_connected ? '🟢 Ollama Online' : '⚪ Ollama Offline'}
-                    </span>
+                {/* Top-right: Ollama badge */}
+                <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
+                  <span style={{ backgroundColor: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 20, backdropFilter: 'blur(6px)' }}>
+                    {data.ollama_connected ? '🟢 Ollama Online' : '⚪ Ollama Offline'}
+                  </span>
+                </div>
+                {/* Bottom: Plant name + sensor chips */}
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 5, padding: '14px 16px' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 8 }}>
+                    {data.current_plant}
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 400, marginLeft: 8 }}>{data.growth_stage} · Day {data.age_days}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                    {[
+                      { label: '🌡', val: `${sensors.temperature}°C` },
+                      { label: '💧', val: `${sensors.humidity}%` },
+                      { label: '☀', val: `${sensors.light} lux` },
+                      { label: '🪴', val: `${sensors.soil_moisture}%` },
+                    ].map((s, i) => (
+                      <div key={i} style={{ backgroundColor: 'rgba(255,255,255,0.13)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '4px 10px', display: 'flex', gap: 5, alignItems: 'center' }}>
+                        <span style={{ fontSize: 13 }}>{s.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{s.val}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -741,7 +761,16 @@ export default function App() {
                     'nitrogen deficiency symptoms',
                     'overwatering plant signs',
                   ].map(q => (
-                    <button key={q} className="tag-selector-btn" onClick={() => { setSearchQuery(q); setTimeout(handleWebSearch, 100); }}>
+                    <button key={q} className="tag-selector-btn" onClick={async () => {
+                      setSearchQuery(q);
+                      setSearching(true); setSearchError(''); setSearchResults([]);
+                      try {
+                        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}&max_results=5`);
+                        if (res.ok) { const r = await res.json(); setSearchResults(r.results || []); if ((r.results||[]).length === 0) setSearchError('No results found.'); }
+                        else { const err = await res.json(); setSearchError(err.detail || 'Search failed.'); }
+                      } catch { setSearchError('Search unavailable. Ensure backend is running.'); }
+                      finally { setSearching(false); }
+                    }}>
                       {q}
                     </button>
                   ))}

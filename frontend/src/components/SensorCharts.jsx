@@ -24,17 +24,17 @@ export default function SensorCharts({ history }) {
   };
 
   const getBarColor = (val) => {
-    if (selectedMetric === 'temperature') return 'url(#purpleGrad)';
-    if (selectedMetric === 'humidity') return '#3B82F6';
-    if (selectedMetric === 'soil_moisture') return '#10B981';
-    return '#F59E0B';
+    if (selectedMetric === 'temperature') return 'url(#greenGrad)';
+    if (selectedMetric === 'humidity') return '#0ea5e9';
+    if (selectedMetric === 'soil_moisture') return '#4a7c20';
+    return '#d97706';
   };
 
   return (
     <div className="zentra-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--color-text-title)', fontFamily: "'Outfit', sans-serif" }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--color-text-title)' }}>
             Sensor Telemetry History
           </h3>
           <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: '500' }}>
@@ -54,8 +54,8 @@ export default function SensorCharts({ history }) {
             </button>
           ))}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', color: 'var(--color-text-body)', cursor: 'pointer' }}>
-            <Calendar size={14} color="#64748B" />
-            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Hourly</span>
+            <Calendar size={14} color="var(--color-text-muted)" />
+            <span>Hourly</span>
           </div>
         </div>
       </div>
@@ -64,9 +64,9 @@ export default function SensorCharts({ history }) {
       <div style={{ width: '100%', overflowX: 'auto' }}>
         <svg viewBox="0 0 700 220" style={{ width: '100%', minWidth: '550px', height: 'auto' }}>
           <defs>
-            <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#7C3AED" />
-              <stop offset="100%" stopColor="#C084FC" />
+            <linearGradient id="greenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#4a7c20" />
+              <stop offset="100%" stopColor="#96c95f" />
             </linearGradient>
           </defs>
 
