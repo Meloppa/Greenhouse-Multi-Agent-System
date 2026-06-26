@@ -35,3 +35,8 @@ SCHEDULER_MODEL = os.getenv("SCHEDULER_MODEL", "llama3.2:1b")
 
 # Web Search Tool
 SEARCH_ENABLED = os.getenv("SEARCH_ENABLED", "true").lower() == "true"
+
+# JWT Authentication
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "zentra-flora-insecure-fallback-key-change-me")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 hours default

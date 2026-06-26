@@ -6,9 +6,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 from typing import Dict, Any, List
+
+from passlib.context import CryptContext
+from jose import jwt, JWTError
 
 from app.models import global_state, SensorReading, PlantSelection, ActuatorState, ChatMessage
 from app.agents.plant_expert import PlantExpertAgent
@@ -24,10 +27,30 @@ from app.model_config import (
 )
 from app.config import (
     SUPABASE_URL, SUPABASE_KEY, IS_SUPABASE_CONFIGURED,
-    IS_TELEGRAM_CONFIGURED, TELEGRAM_CHAT_ID, SEARCH_ENABLED
+    IS_TELEGRAM_CONFIGURED, TELEGRAM_CHAT_ID, SEARCH_ENABLED,
+    JWT_SECRET_KEY, JWT_ALGORITHM, JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 )
 import threading
 import requests
+
+# ─── PASSWORD HASHING & JWT UTILITIES ────────────────────────────────────────
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def hash_password(plain_password: str) -> str:
+    """Returns a bcrypt hash of the given plain-text password."""
+    return _pwd_context.hash(plain_password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifies a plain-text password against a stored bcrypt hash."""
+    return _pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+    """Creates a signed JWT access token with an expiry timestamp."""
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
 app = FastAPI(
@@ -530,11 +553,12 @@ async def toggle_actuator(payload: Dict[str, Any]):
     return {"status": "Updated", "actuators": global_state.actuators}
 
 
-# In-memory user database preloaded with a default developer credentials profile for offline testability
+# In-memory user database preloaded with a default developer credentials profile for offline testability.
+# Passwords are stored as bcrypt hashes — the default admin password is "password123".
 MOCK_USERS_DB = [
     {
         "username": "admin",
-        "password": "password123",
+        "password": hash_password("password123"),
         "email": "aniqihtisyam4@gmail.com",
         "first_name": "Aniq",
         "second_name": "Ihtisyam"
@@ -543,7 +567,8 @@ MOCK_USERS_DB = [
 
 @app.post("/api/auth/signup")
 async def user_sign_up(payload: Dict[str, str]):
-    """Registers a new user profile using credentials. Pushes to Supabase users table and sends bot link email."""
+    """Registers a new user profile using credentials. Password is bcrypt-hashed before storage.
+    Pushes to Supabase users table (with hashed password) and sends bot link welcome email."""
     username = payload.get("username", "").strip()
     password = payload.get("password", "").strip()
     email = payload.get("email", "").strip().lower()
@@ -553,15 +578,21 @@ async def user_sign_up(payload: Dict[str, str]):
     if not username or not password or not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Username, password, and a valid email address are all required")
 
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+
     for user in MOCK_USERS_DB:
         if user["username"].lower() == username.lower():
             raise HTTPException(status_code=400, detail="Username is already taken")
         if user["email"].lower() == email.lower():
             raise HTTPException(status_code=400, detail="Email is already registered")
 
+    # Hash the password before any storage
+    hashed_pw = hash_password(password)
+
     new_user = {
         "username": username,
-        "password": password,
+        "password": hashed_pw,   # Never store plain-text passwords
         "email": email,
         "first_name": first_name,
         "second_name": second_name
@@ -577,14 +608,15 @@ async def user_sign_up(payload: Dict[str, str]):
                 "Content-Type": "application/json",
                 "Prefer": "return=minimal"
             }
+            # Store hashed password in Supabase — never the plain-text value
             insert_payload = {
-                "username": username, "password": password, "email": email,
+                "username": username, "password": hashed_pw, "email": email,
                 "first_name": first_name, "second_name": second_name
             }
             r = requests.post(url, json=insert_payload, headers=headers, timeout=5)
             if r.status_code in [200, 201]:
                 supabase_success = True
-                print(f"[Supabase Signup Success]: Registered user {username}.")
+                print(f"[Supabase Signup Success]: Registered user {username} (password hashed).")
             else:
                 print(f"[Supabase Signup Warning]: Failed to insert into 'users' table (HTTP {r.status_code}: {r.text}).")
         except Exception as e:
@@ -607,18 +639,23 @@ async def user_sign_up(payload: Dict[str, str]):
 
 @app.post("/api/auth/login")
 async def user_sign_in_login(payload: Dict[str, str]):
-    """Authenticates a user via email or username and matching password."""
+    """Authenticates a user via email OR username and matching password.
+    Returns a signed JWT access token on success. Passwords are compared against bcrypt hashes."""
     identifier = payload.get("identifier", "").strip()
     password = payload.get("password", "").strip()
 
     if not identifier or not password:
-        raise HTTPException(status_code=400, detail="Identifier and password are required")
+        raise HTTPException(status_code=400, detail="Identifier (email or username) and password are required")
 
     user_found = None
 
+    # ── Try Supabase first (hashed password comparison) ──
     if IS_SUPABASE_CONFIGURED:
         try:
-            url = f"{SUPABASE_URL}/rest/v1/users?or=(email.eq.{identifier},username.eq.{identifier})"
+            # Encode identifier to avoid URL injection issues
+            from urllib.parse import quote
+            safe_id = quote(identifier, safe="")
+            url = f"{SUPABASE_URL}/rest/v1/users?or=(email.eq.{safe_id},username.eq.{safe_id})"
             headers = {
                 "apikey": SUPABASE_KEY,
                 "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -628,7 +665,13 @@ async def user_sign_in_login(payload: Dict[str, str]):
                 results = r.json()
                 if results and len(results) > 0:
                     db_user = results[0]
-                    if db_user.get("password") == password:
+                    stored_hash = db_user.get("password", "")
+                    # Support both bcrypt-hashed and legacy plain-text (migration safety)
+                    if stored_hash.startswith("$2b$") or stored_hash.startswith("$2a$"):
+                        password_ok = verify_password(password, stored_hash)
+                    else:
+                        password_ok = (stored_hash == password)
+                    if password_ok:
                         user_found = {
                             "username": db_user.get("username"),
                             "email": db_user.get("email"),
@@ -643,28 +686,41 @@ async def user_sign_in_login(payload: Dict[str, str]):
         except Exception as e:
             print(f"[Supabase Auth Error]: Network or connection failed, falling back to local memory - {str(e)}")
 
+    # ── Fallback: in-memory MOCK_USERS_DB (bcrypt hashed passwords) ──
     if not user_found:
         for user in MOCK_USERS_DB:
             if user["username"].lower() == identifier.lower() or user["email"].lower() == identifier.lower():
-                if user["password"] == password:
+                if verify_password(password, user["password"]):
                     user_found = {
                         "username": user["username"],
                         "email": user["email"],
                         "first_name": user["first_name"],
                         "second_name": user["second_name"]
                     }
-                    break
                 else:
                     raise HTTPException(status_code=401, detail="Incorrect password credentials")
+                break
 
     if not user_found:
         raise HTTPException(status_code=404, detail="User account not found")
+
+    # ── Generate JWT access token ──
+    access_token = create_access_token(
+        data={
+            "sub": user_found["username"],
+            "email": user_found["email"]
+        },
+        expires_delta=timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
 
     TelegramBotService.send_alert(f"🔑 User Logged In: {user_found['first_name']} {user_found['second_name']} ({user_found['username']}). Dashboard session synchronized.")
 
     return {
         "status": "Success",
         "user": user_found,
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in_minutes": JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
         "telegram_link": "https://t.me/melmalebot"
     }
 
