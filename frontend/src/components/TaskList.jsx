@@ -63,8 +63,8 @@ export default function TaskList({ tasks, currentPlant, stage, ageDays }) {
               </div>
 
               {/* Task descriptions */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                   <span style={{
                     fontSize: '14px',
                     fontWeight: '600',
@@ -75,7 +75,7 @@ export default function TaskList({ tasks, currentPlant, stage, ageDays }) {
                   }}>
                     {task.task}
                   </span>
-                  <span style={{ fontSize: '9px', fontWeight: '700', padding: '2px 8px', borderRadius: '20px', textTransform: 'uppercase', backgroundColor: pStyle.bg, color: pStyle.color }}>
+                  <span style={{ fontSize: '9px', fontWeight: '700', padding: '2px 8px', borderRadius: '20px', textTransform: 'uppercase', backgroundColor: pStyle.bg, color: pStyle.color, flexShrink: 0 }}>
                     {task.priority}
                   </span>
                 </div>

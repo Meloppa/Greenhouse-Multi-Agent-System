@@ -55,7 +55,7 @@ export default function ChatDrawer({ chatHistory, onSendChatMessage, searchEnabl
         border: '1px solid var(--color-border)',
         display: 'flex',
         flexDirection: 'column',
-        height: 520,
+        height: 'min(520px, 75vh)',
         overflow: 'hidden',
       }}>
         {/* Header */}
@@ -189,7 +189,7 @@ export default function ChatDrawer({ chatHistory, onSendChatMessage, searchEnabl
         border: '1px solid var(--color-border)',
         borderRadius: 12,
         padding: '16px',
-        maxHeight: 520,
+        maxHeight: 'min(520px, 75vh)',
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',

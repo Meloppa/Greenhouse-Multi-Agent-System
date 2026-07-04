@@ -61,8 +61,8 @@ export default function SensorCharts({ history }) {
       </div>
 
       {/* SVG Bar Chart rendering */}
-      <div style={{ width: '100%', overflowX: 'auto' }}>
-        <svg viewBox="0 0 700 220" style={{ width: '100%', minWidth: '550px', height: 'auto' }}>
+      <div style={{ width: '100%' }}>
+        <svg viewBox="0 0 700 220" style={{ width: '100%', height: 'auto' }}>
           <defs>
             <linearGradient id="greenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#4a7c20" />

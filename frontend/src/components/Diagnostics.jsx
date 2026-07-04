@@ -223,12 +223,12 @@ export default function Diagnostics({ onDiagnose, history }) {
               const cfg = CATEGORY_CONFIG[h.category] || (h.status === 'Healthy' ? CATEGORY_CONFIG['Healthy'] : CATEGORY_CONFIG['Disease']);
               const sev = SEVERITY_CONFIG[h.severity] || SEVERITY_CONFIG['Medium'];
               return (
-                <div key={i} style={{ padding: '12px 14px', backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div key={i} style={{ padding: '12px 14px', backgroundColor: 'var(--color-bg-card)', border: '1px solid var(--color-border)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 200 }}>
                     <div style={{ width: 34, height: 34, borderRadius: 7, backgroundColor: cfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {h.status === 'Healthy' ? <ShieldCheck size={16} color={cfg.color} /> : <Bug size={16} color={cfg.color} />}
                     </div>
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-title)' }}>{h.diagnosis || 'Unknown'}</div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{h.filename} · {h.timestamp}</div>
                     </div>

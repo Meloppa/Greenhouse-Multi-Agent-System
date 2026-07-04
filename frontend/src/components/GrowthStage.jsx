@@ -1,23 +1,21 @@
 import React from 'react';
 import { Sprout, Settings, Calendar } from 'lucide-react';
+import { PLANTS as plants, STAGES as stages, getRecommendedAge } from '../plantData';
 
-export default function GrowthStage({ 
-  currentPlant, 
-  growthStage, 
-  ageDays, 
-  sensors, 
-  targets, 
-  onSelectPlant 
+export default function GrowthStage({
+  currentPlant,
+  growthStage,
+  ageDays,
+  sensors,
+  targets,
+  onSelectPlant
 }) {
-  const plants = ['Strawberry', 'Tomato', 'Lettuce', 'Orchid', 'Basil', 'Cactus'];
-  const stages = ['Seedling', 'Vegetative', 'Flowering', 'Fruiting'];
-
   const handlePlantChange = (e) => {
-    onSelectPlant({ plant_type: e.target.value, growth_stage: growthStage, age_days: ageDays });
+    onSelectPlant({ plant_type: e.target.value, growth_stage: growthStage, age_days: getRecommendedAge(e.target.value, growthStage) });
   };
 
   const handleStageChange = (e) => {
-    onSelectPlant({ plant_type: currentPlant, growth_stage: e.target.value, age_days: ageDays });
+    onSelectPlant({ plant_type: currentPlant, growth_stage: e.target.value, age_days: getRecommendedAge(currentPlant, e.target.value) });
   };
 
   const handleAgeChange = (e) => {
@@ -110,7 +108,7 @@ export default function GrowthStage({
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Age (Days)</label>
+          <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Age (Days) · AI recommended</label>
           <div className="zentra-select-container">
             <Calendar size={14} color="#64748B" style={{ marginRight: '6px' }} />
             <input 

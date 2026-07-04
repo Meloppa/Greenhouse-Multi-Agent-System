@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Settings, Sun, Moon,
   Thermometer, Droplet, Wind, Lightbulb,
   ChevronRight, Info, LogOut, CloudOff,
-  Wifi, Power, MessageSquare, ClipboardList, Microscope,
+  Wifi, MessageSquare, ClipboardList, Microscope,
   BarChart2, Send, CheckCircle2,
   RefreshCw, Bell, ExternalLink, AlertTriangle,
   Leaf
@@ -13,6 +13,7 @@ import GrowthStage from './components/GrowthStage';
 import TaskList from './components/TaskList';
 import Diagnostics from './components/Diagnostics';
 import ChatDrawer from './components/ChatDrawer';
+import { PLANTS, STAGES, getRecommendedAge } from './plantData';
 
 const API_BASE = 'http://127.0.0.1:8000/api';
 
@@ -59,8 +60,6 @@ export default function App() {
   });
 
   // ── Plant selector ──
-  const PLANTS  = ['Strawberry', 'Tomato', 'Lettuce', 'Orchid', 'Basil', 'Cactus'];
-  const STAGES  = ['Seedling', 'Vegetative', 'Flowering', 'Fruiting'];
   const [selPlant, setSelPlant]  = useState('Strawberry');
   const [selStage, setSelStage]  = useState('Fruiting');
   const [selAge, setSelAge]      = useState(45);
@@ -70,6 +69,8 @@ export default function App() {
     document.body.classList.toggle('dark-mode', darkMode);
   }, [darkMode]);
 
+  const plantSelectorsInitRef = useRef(false);
+
   const fetchStatus = async () => {
     try {
       const res = await fetch(`${API_BASE}/status`);
@@ -77,9 +78,15 @@ export default function App() {
         const d = await res.json();
         setData(d);
         setBackendConnected(true);
-        setSelPlant(d.current_plant);
-        setSelStage(d.growth_stage);
-        setSelAge(d.age_days);
+        // Only seed the Plant Expert form from the server once — after that it's
+        // a local draft controlled by the user until they click Apply, so the
+        // 3s background poll doesn't stomp on an in-progress, unsaved selection.
+        if (!plantSelectorsInitRef.current) {
+          setSelPlant(d.current_plant);
+          setSelStage(d.growth_stage);
+          setSelAge(d.age_days);
+          plantSelectorsInitRef.current = true;
+        }
       }
     } catch { setBackendConnected(false); }
   };
@@ -353,20 +360,20 @@ export default function App() {
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ marginLeft: 64, flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', padding: '18px 22px 24px' }}>
+      <div className="app-main-content">
 
         {/* ══ DASHBOARD ══ */}
         {activeTab === 'dashboard' && (
           <div className="dashboard-grid">
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div>
                 <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-text-title)', letterSpacing: '-0.02em' }}>Overview</span>
                 <span style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 10 }}>
                   {data.current_plant} · {data.growth_stage} · Day {data.age_days}
                 </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 {!backendConnected && <span className="status-badge offline"><CloudOff size={11} />Offline</span>}
                 <span className={`status-badge ${backendConnected ? 'online' : 'offline'}`}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: 'currentColor', animation: backendConnected ? 'pulse-dot 2s infinite' : 'none' }} />
@@ -376,7 +383,7 @@ export default function App() {
             </div>
 
             {/* ── Sensor quick stats row ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
+            <div className="quick-stats-grid">
               {[
                 { label: 'Temperature', val: `${sensors.temperature}°C`, icon: <Thermometer size={14} />, ok: isInRange(sensors.temperature, data.targets.min_temp, data.targets.max_temp) },
                 { label: 'Humidity',    val: `${sensors.humidity}%`,     icon: <Droplet size={14} />,    ok: isInRange(sensors.humidity,    data.targets.min_humidity, data.targets.max_humidity) },
@@ -448,22 +455,26 @@ export default function App() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-                  {[
-                    { label: 'Crop', val: selPlant, setter: setSelPlant, options: PLANTS },
-                    { label: 'Stage', val: selStage, setter: setSelStage, options: STAGES },
-                  ].map(f => (
-                    <div key={f.label} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{f.label}</label>
-                      <div className="zentra-select-container">
-                        <select value={f.val} onChange={e => f.setter(e.target.value)} className="zentra-select">
-                          {f.options.map(o => <option key={o}>{o}</option>)}
-                        </select>
-                      </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Crop</label>
+                    <div className="zentra-select-container">
+                      <select value={selPlant} onChange={e => { setSelPlant(e.target.value); setSelAge(getRecommendedAge(e.target.value, selStage)); }} className="zentra-select">
+                        {PLANTS.map(o => <option key={o}>{o}</option>)}
+                      </select>
                     </div>
-                  ))}
+                  </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Age (days)</label>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stage</label>
+                    <div className="zentra-select-container">
+                      <select value={selStage} onChange={e => { setSelStage(e.target.value); setSelAge(getRecommendedAge(selPlant, e.target.value)); }} className="zentra-select">
+                        {STAGES.map(o => <option key={o}>{o}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Age (days) · AI recommended for {selStage}</label>
                     <div className="zentra-select-container">
                       <input type="number" min={1} value={selAge} onChange={e => setSelAge(parseInt(e.target.value) || 1)} className="zentra-select" style={{ border: 'none', background: 'transparent' }} />
                     </div>
@@ -591,7 +602,7 @@ export default function App() {
                 </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="esp8266-grid">
 
                 {/* Photoresistor card */}
                 <div className="zentra-card hardware-glow-card">
