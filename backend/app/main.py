@@ -229,7 +229,7 @@ async def update_sensor_readings(reading: SensorReading):
         "time": timestamp.split(" ")[0][:-3],  # HH:MM format
         "temperature": reading.temperature,
         "humidity": reading.humidity,
-        "light": reading.light,
+        "light": global_state.last_light_pct,
         "soil_moisture": reading.soil_moisture
     })
     if len(global_state.sensor_history) > 12:
@@ -501,7 +501,7 @@ async def send_chat_message(payload: Dict[str, Any]):
         elif "water" in msg or "soil" in msg or "moisture" in msg or "pump" in msg:
             reply_text = "Soil moisture target is set between 50% and 60% for optimal root intake. The water pump will trigger automatically if moisture falls below 50%."
         elif "light" in msg or "lux" in msg:
-            reply_text = "Ambient light targets ensure optimal photosynthesis. The grow lights will supplement light if natural lux falls below target boundaries."
+            reply_text = "Ambient light targets ensure optimal photosynthesis. The grow lights turn on automatically when the photoresistor reading falls below the target minimum for your selected plant."
         elif "pest" in msg or "disease" in msg or "mildew" in msg or "mite" in msg:
             reply_text = "To inspect for diseases, upload a leaf photo in the Diagnostics tab. Our vision model (qwen3-vl:4b) scans for spider mites, powdery mildew, leaf spots, and nutrient deficiencies."
         elif "search" in msg or "find" in msg or "look up" in msg:
@@ -544,10 +544,6 @@ async def toggle_actuator(payload: Dict[str, Any]):
         global_state.actuators.fan = bool(state)
         action = "ON" if state else "OFF"
         TelegramBotService.send_alert(f"🔧 Manual Override: Ventilation Fan turned {action}.")
-    elif device == "grow_lights":
-        global_state.actuators.grow_lights = bool(state)
-        action = "ON" if state else "OFF"
-        TelegramBotService.send_alert(f"🔧 Manual Override: Grow Lights turned {action}.")
     else:
         raise HTTPException(status_code=400, detail="Invalid hardware device")
 
@@ -559,12 +555,24 @@ async def toggle_actuator(payload: Dict[str, Any]):
 @app.post("/api/esp8266/sensor")
 async def esp8266_sensor_push(payload: Dict[str, Any]):
     """Receives photoresistor reading from ESP8266 every ~2 s.
-    Returns current desired LED states so the ESP8266 can apply them immediately."""
-    photoresistor = payload.get("photoresistor", 0)
+    Runs the ActuatorControlAgent's light logic (auto mode drives LEDs to keep
+    light within the selected plant's target range) and returns the desired
+    LED states so the ESP8266 can apply them immediately."""
+    photoresistor = int(payload.get("photoresistor", 0))
     timestamp = datetime.now().strftime("%I:%M:%S %p")
 
-    global_state.esp8266.photoresistor = int(photoresistor)
-    global_state.esp8266.last_seen = timestamp
+    new_esp8266, light_pct, logs = ActuatorControlAgent.process_light(
+        photoresistor, global_state.targets, global_state.esp8266
+    )
+    new_esp8266.last_seen = timestamp
+    global_state.esp8266 = new_esp8266
+    global_state.last_light_pct = light_pct
+
+    for log in logs:
+        subject = f"Hardware State Change: {log['device']} {log['action']}"
+        body_msg = f"The {log['device']} was {log['action'].lower()} automatically. Reason: {log['reason']}."
+        TelegramBotService.send_alert(f"⚠️ *{subject}*\n{body_msg}")
+        EmailService.send_alert(subject, body_msg)
 
     return {
         "status": "OK",
@@ -576,7 +584,8 @@ async def esp8266_sensor_push(payload: Dict[str, Any]):
 
 @app.post("/api/esp8266/led")
 async def esp8266_led_control(payload: Dict[str, Any]):
-    """Sets desired LED state from the dashboard.
+    """Sets desired LED state manually from the dashboard, switching lighting
+    into manual mode so the auto light agent stops overriding it.
     The ESP8266 receives the new state on its next sensor push (≤2 s latency)."""
     led   = payload.get("led")    # "led1" | "led2" | "led3" | "all"
     state = bool(payload.get("state", False))
@@ -594,12 +603,36 @@ async def esp8266_led_control(payload: Dict[str, Any]):
     else:
         raise HTTPException(status_code=400, detail="Invalid LED. Use led1, led2, led3, or all")
 
+    global_state.esp8266.light_mode = "manual"
+
     action = "ON" if state else "OFF"
     label  = led.upper() if led != "all" else "All LEDs"
-    TelegramBotService.send_alert(f"💡 ESP8266 {label} turned {action} via dashboard.")
+    TelegramBotService.send_alert(f"💡 ESP8266 {label} turned {action} via dashboard (manual mode).")
 
     return {
         "status": "OK",
+        "led1": global_state.esp8266.led1,
+        "led2": global_state.esp8266.led2,
+        "led3": global_state.esp8266.led3,
+        "light_mode": global_state.esp8266.light_mode
+    }
+
+
+@app.post("/api/esp8266/light_mode")
+async def esp8266_light_mode(payload: Dict[str, str]):
+    """Switches the greenhouse node's lighting between automatic
+    (ActuatorControlAgent drives LEDs from the photoresistor vs. plant
+    target range) and manual (dashboard-only control)."""
+    mode = payload.get("mode")
+    if mode not in ("auto", "manual"):
+        raise HTTPException(status_code=400, detail="Mode must be 'auto' or 'manual'")
+
+    global_state.esp8266.light_mode = mode
+    TelegramBotService.send_alert(f"💡 Lighting mode switched to {mode.upper()}.")
+
+    return {
+        "status": "OK",
+        "light_mode": global_state.esp8266.light_mode,
         "led1": global_state.esp8266.led1,
         "led2": global_state.esp8266.led2,
         "led3": global_state.esp8266.led3

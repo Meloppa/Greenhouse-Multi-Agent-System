@@ -1,13 +1,12 @@
 from typing import Tuple, List, Dict, Any
-from app.models import SensorReading, TargetSettings, ActuatorState
+from app.models import SensorReading, TargetSettings, ActuatorState, ESP8266State
 
 class ActuatorControlAgent:
     @staticmethod
     def process_readings(sensors: SensorReading, targets: TargetSettings, current_actuators: ActuatorState) -> Tuple[ActuatorState, List[Dict[str, Any]]]:
         new_actuators = ActuatorState(
             pump=current_actuators.pump,
-            fan=current_actuators.fan,
-            grow_lights=current_actuators.grow_lights
+            fan=current_actuators.fan
         )
         logs = []
 
@@ -56,22 +55,46 @@ class ActuatorControlAgent:
                     "reason": f"Temperature ({sensors.temperature}°C) and Humidity ({sensors.humidity}%) stabilized within bounds"
                 })
 
-        # 3. Light Intensity Control -> Grow Lights
-        if sensors.light < targets.min_light:
-            if not current_actuators.grow_lights:
-                new_actuators.grow_lights = True
+        return new_actuators, logs
+
+    @staticmethod
+    def process_light(photoresistor: int, targets: TargetSettings, esp8266: ESP8266State) -> Tuple[ESP8266State, int, List[Dict[str, Any]]]:
+        """Derives a 0-100% light level from the photoresistor and, when in
+        auto mode, drives the 3 LED channels to keep it within the selected
+        plant's target range. Manual mode leaves LED state untouched."""
+        light_pct = round(photoresistor / 1023 * 100)
+
+        new_state = ESP8266State(
+            photoresistor=photoresistor,
+            led1=esp8266.led1,
+            led2=esp8266.led2,
+            led3=esp8266.led3,
+            light_mode=esp8266.light_mode,
+            last_seen=esp8266.last_seen
+        )
+        logs = []
+
+        if new_state.light_mode != "auto":
+            return new_state, light_pct, logs
+
+        all_on = new_state.led1 and new_state.led2 and new_state.led3
+        any_on = new_state.led1 or new_state.led2 or new_state.led3
+
+        if light_pct < targets.min_light:
+            if not all_on:
+                new_state.led1 = new_state.led2 = new_state.led3 = True
                 logs.append({
                     "device": "Grow Lights",
                     "action": "Activated",
-                    "reason": f"Light level ({sensors.light} Lux) fell below ideal minimum ({targets.min_light} Lux)"
+                    "reason": f"Light level ({light_pct}%) fell below target minimum ({targets.min_light}%)"
                 })
-        elif sensors.light >= targets.max_light:
-            if current_actuators.grow_lights:
-                new_actuators.grow_lights = False
+        elif light_pct >= targets.max_light:
+            if any_on:
+                new_state.led1 = new_state.led2 = new_state.led3 = False
                 logs.append({
                     "device": "Grow Lights",
                     "action": "Deactivated",
-                    "reason": f"Light level ({sensors.light} Lux) meets target maximum ({targets.max_light} Lux)"
+                    "reason": f"Light level ({light_pct}%) reached target maximum ({targets.max_light}%)"
                 })
 
-        return new_actuators, logs
+        return new_state, light_pct, logs

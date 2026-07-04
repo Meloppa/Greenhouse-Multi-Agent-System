@@ -6,7 +6,7 @@ const SYSTEM_COMMANDS = [
   { cmd: '/temp',       desc: 'Current air temperature' },
   { cmd: '/humidity',   desc: 'Current humidity reading' },
   { cmd: '/soil',       desc: 'Soil moisture level' },
-  { cmd: '/light',      desc: 'Light intensity (lux)' },
+  { cmd: '/light',      desc: 'Light intensity (%)' },
   { cmd: '/tasks',      desc: "Today's agri task list" },
   { cmd: '/pump_on',    desc: 'Manually activate water pump' },
   { cmd: '/pump_off',   desc: 'Deactivate water pump' },

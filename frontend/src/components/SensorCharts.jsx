@@ -6,12 +6,12 @@ export default function SensorCharts({ history }) {
 
   // Safely fallback to simulation entries if history is empty
   const data = history.length > 0 ? history : [
-    { time: '08:00', temperature: 22, humidity: 60, light: 400, soil_moisture: 52 },
-    { time: '10:00', temperature: 24, humidity: 62, light: 500, soil_moisture: 51 },
-    { time: '12:00', temperature: 26, humidity: 65, light: 800, soil_moisture: 48 },
-    { time: '14:00', temperature: 25, humidity: 64, light: 750, soil_moisture: 49 },
-    { time: '16:00', temperature: 23, humidity: 61, light: 450, soil_moisture: 53 },
-    { time: '18:00', temperature: 21, humidity: 59, light: 200, soil_moisture: 55 }
+    { time: '08:00', temperature: 22, humidity: 60, light: 40, soil_moisture: 52 },
+    { time: '10:00', temperature: 24, humidity: 62, light: 50, soil_moisture: 51 },
+    { time: '12:00', temperature: 26, humidity: 65, light: 80, soil_moisture: 48 },
+    { time: '14:00', temperature: 25, humidity: 64, light: 75, soil_moisture: 49 },
+    { time: '16:00', temperature: 23, humidity: 61, light: 45, soil_moisture: 53 },
+    { time: '18:00', temperature: 21, humidity: 59, light: 20, soil_moisture: 55 }
   ];
 
   const maxVal = Math.max(...data.map(d => d[selectedMetric] || 1)) * 1.2;
@@ -19,7 +19,7 @@ export default function SensorCharts({ history }) {
   const metricLabel = {
     temperature: 'Air Temp (°C)',
     humidity: 'Air Humidity (%)',
-    light: 'Light (Lux)',
+    light: 'Light (%)',
     soil_moisture: 'Soil Moisture (%)'
   };
 

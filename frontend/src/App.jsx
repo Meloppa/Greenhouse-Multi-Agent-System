@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  LayoutDashboard, Settings, Sprout, Sun, Moon,
+  LayoutDashboard, Settings, Sun, Moon,
   Thermometer, Droplet, Wind, Lightbulb,
   ChevronRight, Info, LogOut, CloudOff,
   Wifi, Power, MessageSquare, ClipboardList, Microscope,
-  BarChart2, Send, CheckCircle2, XCircle,
+  BarChart2, Send, CheckCircle2,
   RefreshCw, Bell, ExternalLink, AlertTriangle,
-  Search, Globe, Leaf
+  Leaf
 } from 'lucide-react';
 import SensorCharts from './components/SensorCharts';
 import GrowthStage from './components/GrowthStage';
@@ -42,9 +42,9 @@ export default function App() {
     current_plant: 'Strawberry',
     growth_stage: 'Fruiting',
     age_days: 45,
-    sensors: { temperature: 24, humidity: 50, light: 220, soil_moisture: 42 },
-    targets: { min_temp: 16, max_temp: 23, min_humidity: 50, max_humidity: 60, min_light: 600, max_light: 1000, min_soil_moisture: 50, max_soil_moisture: 60 },
-    actuators: { pump: false, fan: false, grow_lights: false },
+    sensors: { temperature: 24, humidity: 50, light: 45, soil_moisture: 42 },
+    targets: { min_temp: 16, max_temp: 23, min_humidity: 50, max_humidity: 60, min_light: 60, max_light: 100, min_soil_moisture: 50, max_soil_moisture: 60 },
+    actuators: { pump: false, fan: false },
     sensor_history: [],
     chat_history: [],
     alerts_history: [],
@@ -54,27 +54,16 @@ export default function App() {
     agent_bindings: {},
     models: {},
     search_enabled: true,
-    esp8266: { photoresistor: 0, led1: false, led2: false, led3: false, last_seen: null }
+    esp8266: { photoresistor: 0, led1: false, led2: false, led3: false, light_mode: 'auto', last_seen: null }
   });
 
-  // ── Sensor sim inputs ──
-  const [simInputs, setSimInputs] = useState({ temperature: 24, humidity: 50, light: 220, soil_moisture: 42 });
-  const [simSending, setSimSending] = useState(false);
-  const [simResult, setSimResult]   = useState(null);
-
   // ── Plant selector ──
-  const PLANTS  = ['Strawberry', 'Tomato', 'Lettuce', 'Orchid', 'Basil'];
+  const PLANTS  = ['Strawberry', 'Tomato', 'Lettuce', 'Orchid', 'Basil', 'Cactus'];
   const STAGES  = ['Seedling', 'Vegetative', 'Flowering', 'Fruiting'];
   const [selPlant, setSelPlant]  = useState('Strawberry');
   const [selStage, setSelStage]  = useState('Fruiting');
   const [selAge, setSelAge]      = useState(45);
   const [plantSaving, setPlantSaving] = useState(false);
-
-  // ── Web search ──
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState('');
 
   useEffect(() => {
     document.body.classList.toggle('dark-mode', darkMode);
@@ -87,7 +76,6 @@ export default function App() {
         const d = await res.json();
         setData(d);
         setBackendConnected(true);
-        if (d.sensors) setSimInputs({ temperature: d.sensors.temperature, humidity: d.sensors.humidity, light: d.sensors.light, soil_moisture: d.sensors.soil_moisture });
         setSelPlant(d.current_plant);
         setSelStage(d.growth_stage);
         setSelAge(d.age_days);
@@ -157,7 +145,7 @@ export default function App() {
     const ledUpdate = led === 'all'
       ? { led1: state, led2: state, led3: state }
       : { [led]: state };
-    setData(prev => ({ ...prev, esp8266: { ...prev.esp8266, ...ledUpdate } }));
+    setData(prev => ({ ...prev, esp8266: { ...prev.esp8266, ...ledUpdate, light_mode: 'manual' } }));
     if (!backendConnected) return;
     try {
       await fetch(`${API_BASE}/esp8266/led`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ led, state }) });
@@ -165,15 +153,13 @@ export default function App() {
     } catch {}
   };
 
-  const handleSimPush = async () => {
-    setSimSending(true); setSimResult(null);
-    if (!backendConnected) { setTimeout(() => { setSimSending(false); setSimResult({ ok: true, actions: [] }); }, 600); return; }
+  const handleLightModeChange = async (mode) => {
+    setData(prev => ({ ...prev, esp8266: { ...prev.esp8266, light_mode: mode } }));
+    if (!backendConnected) return;
     try {
-      const res = await fetch(`${API_BASE}/sensors`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(simInputs) });
-      if (res.ok) { const r = await res.json(); setSimResult({ ok: true, actions: r.triggered_actions || [] }); fetchStatus(); }
-      else setSimResult({ ok: false, actions: [] });
-    } catch { setSimResult({ ok: false, actions: [] }); }
-    finally { setSimSending(false); }
+      await fetch(`${API_BASE}/esp8266/light_mode`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+      fetchStatus();
+    } catch {}
   };
 
   const handlePlantApply = async () => {
@@ -220,25 +206,9 @@ export default function App() {
     } catch {}
   };
 
-  const handleWebSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setSearching(true); setSearchError(''); setSearchResults([]);
-    try {
-      const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(searchQuery)}&max_results=5`);
-      if (res.ok) {
-        const r = await res.json();
-        setSearchResults(r.results || []);
-        if ((r.results || []).length === 0) setSearchError('No results found. Try a different query.');
-      } else {
-        const err = await res.json();
-        setSearchError(err.detail || 'Search failed.');
-      }
-    } catch { setSearchError('Search unavailable. Ensure backend is running.'); }
-    finally { setSearching(false); }
-  };
-
-  const sensors  = data.sensors  || { temperature: 24, humidity: 50, light: 220, soil_moisture: 42 };
-  const esp8266  = data.esp8266  || { photoresistor: 0, led1: false, led2: false, led3: false, last_seen: null };
+  const sensors  = data.sensors  || { temperature: 24, humidity: 50, light: 45, soil_moisture: 42 };
+  const esp8266  = data.esp8266  || { photoresistor: 0, led1: false, led2: false, led3: false, light_mode: 'auto', last_seen: null };
+  const lightPct = Math.round((esp8266.photoresistor || 0) / 1023 * 100);
 
   // ── Helpers ──
   const isInRange = (val, min, max) => val >= min && val <= max;
@@ -329,7 +299,6 @@ export default function App() {
     { id: 'tasks',       icon: ClipboardList,    label: 'Tasks'       },
     { id: 'diagnostics', icon: Microscope,       label: 'Diagnostics' },
     { id: 'chat',        icon: MessageSquare,    label: 'Chat'        },
-    { id: 'search',      icon: Globe,            label: 'Web Search'  },
     { id: 'telegram',    icon: Bell,             label: 'Telegram'    },
     { id: 'settings',    icon: Settings,         label: 'Settings'    },
   ];
@@ -397,7 +366,7 @@ export default function App() {
               {[
                 { label: 'Temperature', val: `${sensors.temperature}°C`, icon: <Thermometer size={14} />, ok: isInRange(sensors.temperature, data.targets.min_temp, data.targets.max_temp) },
                 { label: 'Humidity',    val: `${sensors.humidity}%`,     icon: <Droplet size={14} />,    ok: isInRange(sensors.humidity,    data.targets.min_humidity, data.targets.max_humidity) },
-                { label: 'Light',       val: `${sensors.light} lux`,     icon: <Lightbulb size={14} />,  ok: isInRange(sensors.light,       data.targets.min_light,    data.targets.max_light) },
+                { label: 'Light',       val: `${lightPct}%`,             icon: <Lightbulb size={14} />,  ok: isInRange(lightPct,            data.targets.min_light,    data.targets.max_light) },
                 { label: 'Soil',        val: `${sensors.soil_moisture}%`,icon: <Droplet size={14} />,    ok: isInRange(sensors.soil_moisture, data.targets.min_soil_moisture, data.targets.max_soil_moisture) },
               ].map((s, i) => (
                 <div key={i} className="zentra-card" style={{ gap: 8, padding: 14 }}>
@@ -445,7 +414,7 @@ export default function App() {
                     {[
                       { label: '🌡', val: `${sensors.temperature}°C` },
                       { label: '💧', val: `${sensors.humidity}%` },
-                      { label: '☀', val: `${sensors.light} lux` },
+                      { label: '☀', val: `${lightPct}%` },
                       { label: '🪴', val: `${sensors.soil_moisture}%` },
                     ].map((s, i) => (
                       <div key={i} style={{ backgroundColor: 'rgba(255,255,255,0.13)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '4px 10px', display: 'flex', gap: 5, alignItems: 'center' }}>
@@ -492,7 +461,7 @@ export default function App() {
                     {[
                       { label: 'Temp',     val: `${data.targets.min_temp}–${data.targets.max_temp}°C` },
                       { label: 'Humidity', val: `${data.targets.min_humidity}–${data.targets.max_humidity}%` },
-                      { label: 'Light',    val: `${data.targets.min_light}–${data.targets.max_light} lux` },
+                      { label: 'Light',    val: `${data.targets.min_light}–${data.targets.max_light}%` },
                       { label: 'Soil',     val: `${data.targets.min_soil_moisture}–${data.targets.max_soil_moisture}%` },
                     ].map(t => (
                       <div key={t.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -512,55 +481,6 @@ export default function App() {
 
             {/* Bottom row */}
             <div className="dashboard-row-bottom">
-              {/* IoT Push */}
-              <div className="zentra-card hardware-glow-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-title)' }}>IoT Sensor Push</div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>ESP32 · /api/sensors</div>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: backendConnected ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
-                    <Wifi size={14} style={{ verticalAlign: 'middle', marginRight: 3 }} />{backendConnected ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {[
-                    { key: 'temperature', label: 'Temp °C',  icon: <Thermometer size={12} color="var(--color-primary)" /> },
-                    { key: 'humidity',    label: 'Humidity %', icon: <Droplet size={12} color="var(--sky-400)" /> },
-                    { key: 'light',       label: 'Light lux',  icon: <Lightbulb size={12} color="var(--amber-400)" /> },
-                    { key: 'soil_moisture', label: 'Soil %',  icon: <Droplet size={12} color="var(--green-500)" /> },
-                  ].map(f => (
-                    <div key={f.key} style={{ backgroundColor: 'var(--color-bg-base)', borderRadius: 8, padding: '9px 11px', border: '1px solid var(--color-border)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                        {f.icon}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-muted)' }}>{f.label}</span>
-                      </div>
-                      <input type="number" value={simInputs[f.key]}
-                        onChange={e => setSimInputs(prev => ({ ...prev, [f.key]: parseFloat(e.target.value) || 0 }))}
-                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: 16, fontWeight: 700, color: 'var(--color-text-title)', outline: 'none' }} />
-                    </div>
-                  ))}
-                </div>
-
-                <button onClick={handleSimPush} disabled={simSending} className="zentra-btn">
-                  {simSending ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={13} />}
-                  Push Readings
-                </button>
-
-                {simResult && (
-                  <div className={`info-banner ${simResult.ok ? 'success' : 'danger'}`}>
-                    {simResult.ok ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
-                    <span style={{ fontSize: 11 }}>
-                      {simResult.ok
-                        ? simResult.actions.length > 0
-                          ? simResult.actions.map(a => `${a.device} ${a.action}`).join(' · ')
-                          : 'Accepted — all values in range.'
-                        : 'Failed to push readings.'}
-                    </span>
-                  </div>
-                )}
-              </div>
-
               {/* Actuator Control */}
               <div className="zentra-card hardware-glow-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -572,9 +492,8 @@ export default function App() {
                 </div>
 
                 {[
-                  { key: 'pump',        label: 'Water Pump',      sub: 'Soil moisture',   icon: <Droplet size={16} /> },
-                  { key: 'fan',         label: 'Ventilation Fan', sub: 'Temp & humidity', icon: <Wind size={16} /> },
-                  { key: 'grow_lights', label: 'Grow Lights',     sub: 'Light intensity', icon: <Sun size={16} /> },
+                  { key: 'pump', label: 'Water Pump',      sub: 'Soil moisture',   icon: <Droplet size={16} /> },
+                  { key: 'fan',  label: 'Ventilation Fan', sub: 'Temp & humidity', icon: <Wind size={16} /> },
                 ].map(act => {
                   const on = data.actuators[act.key];
                   return (
@@ -686,6 +605,10 @@ export default function App() {
                     </div>
                   </div>
 
+                  <div style={{ fontSize: 11, color: 'var(--color-text-body)', backgroundColor: 'var(--color-bg-base)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', textAlign: 'center' }}>
+                    Target for <strong>{data.current_plant}</strong> ({data.growth_stage}): {data.targets.min_light}–{data.targets.max_light}%
+                  </div>
+
                   {esp8266.last_seen ? (
                     <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textAlign: 'right' }}>
                       Last push: {esp8266.last_seen}
@@ -697,14 +620,26 @@ export default function App() {
                   )}
                 </div>
 
-                {/* LED Control card */}
+                {/* Grow Lights card (real ESP8266 LED1/2/3) */}
                 <div className="zentra-card hardware-glow-card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-title)' }}>LED Control</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-title)' }}>Grow Lights</div>
                       <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>D1 · D2 · D3 GPIO pins</div>
                     </div>
                     <Lightbulb size={18} color={[esp8266.led1, esp8266.led2, esp8266.led3].some(Boolean) ? 'var(--amber-400)' : 'var(--color-text-muted)'} />
+                  </div>
+
+                  {/* Auto / Manual mode toggle */}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => handleLightModeChange('auto')}
+                      className={`tag-selector-btn ${esp8266.light_mode === 'auto' ? 'active' : ''}`} style={{ flex: 1 }}>
+                      Auto (ActuatorControlAgent)
+                    </button>
+                    <button onClick={() => handleLightModeChange('manual')}
+                      className={`tag-selector-btn ${esp8266.light_mode === 'manual' ? 'active' : ''}`} style={{ flex: 1 }}>
+                      Manual
+                    </button>
                   </div>
 
                   {[
@@ -744,6 +679,12 @@ export default function App() {
                       All OFF
                     </button>
                   </div>
+
+                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                    {esp8266.light_mode === 'auto'
+                      ? 'Auto-controlled from the photoresistor vs. plant target range'
+                      : 'Manual mode — switch back to Auto to resume automatic control'}
+                  </div>
                 </div>
 
               </div>
@@ -762,7 +703,7 @@ export default function App() {
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               <div style={{ flex: '2 1 500px' }}><SensorCharts history={data.sensor_history} /></div>
               <div style={{ flex: '1 1 300px' }}>
-                <GrowthStage currentPlant={data.current_plant} growthStage={data.growth_stage} ageDays={data.age_days} sensors={data.sensors} targets={data.targets}
+                <GrowthStage currentPlant={data.current_plant} growthStage={data.growth_stage} ageDays={data.age_days} sensors={{ ...data.sensors, light: lightPct }} targets={data.targets}
                   onSelectPlant={async (payload) => {
                     setData(prev => ({ ...prev, current_plant: payload.plant_type, growth_stage: payload.growth_stage, age_days: payload.age_days }));
                     if (!backendConnected) return;
@@ -806,104 +747,6 @@ export default function App() {
             </div>
             {!backendConnected && <div className="info-banner warning"><CloudOff size={13} />Offline — responses are simulated</div>}
             <ChatDrawer chatHistory={data.chat_history} onSendChatMessage={handleSendChatMessage} searchEnabled={data.search_enabled} />
-          </div>
-        )}
-
-        {/* ══ WEB SEARCH ══ */}
-        {activeTab === 'search' && (
-          <div className="page-shell">
-            <div>
-              <h2 className="page-title">Web Search</h2>
-              <p className="page-subtitle">Search the web for agricultural info, plant care guides, and treatment methods.</p>
-            </div>
-
-            {/* Search bar */}
-            <div className="zentra-card" style={{ padding: 16 }}>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-                  <input
-                    type="text"
-                    placeholder="e.g. tomato blight treatment, powdery mildew organic cure..."
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleWebSearch()}
-                    className="zentra-input"
-                    style={{ paddingLeft: 36 }}
-                  />
-                </div>
-                <button onClick={handleWebSearch} disabled={searching || !backendConnected} className="zentra-btn" style={{ width: 100, flexShrink: 0 }}>
-                  {searching ? <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Search size={13} />}
-                  {searching ? 'Searching' : 'Search'}
-                </button>
-              </div>
-              {!backendConnected && (
-                <div className="info-banner warning" style={{ fontSize: 11 }}>
-                  <CloudOff size={12} />Backend offline — web search requires the backend server.
-                </div>
-              )}
-            </div>
-
-            {/* Error */}
-            {searchError && (
-              <div className="info-banner danger"><AlertTriangle size={13} />{searchError}</div>
-            )}
-
-            {/* Results */}
-            {searchResults.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                  {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "<strong>{searchQuery}</strong>"
-                </div>
-                {searchResults.map((r, i) => (
-                  <div key={i} className="search-result-item">
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                      <div>
-                        <a href={r.url} target="_blank" rel="noreferrer"
-                          style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none', lineHeight: 1.4 }}>
-                          {r.title}
-                        </a>
-                        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2, marginBottom: 6 }}>{r.url}</div>
-                        <div style={{ fontSize: 13, color: 'var(--color-text-body)', lineHeight: 1.6 }}>{r.snippet}</div>
-                      </div>
-                      <a href={r.url} target="_blank" rel="noreferrer" style={{ flexShrink: 0, color: 'var(--color-text-muted)', marginTop: 3 }}>
-                        <ExternalLink size={14} />
-                      </a>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Quick search suggestions */}
-            {searchResults.length === 0 && !searchError && !searching && (
-              <div className="zentra-card" style={{ padding: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: 10 }}>Suggested searches</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {[
-                    'tomato leaf blight treatment',
-                    'powdery mildew organic cure',
-                    'strawberry nutrient deficiency',
-                    'spider mites greenhouse control',
-                    'nitrogen deficiency symptoms',
-                    'overwatering plant signs',
-                  ].map(q => (
-                    <button key={q} className="tag-selector-btn" onClick={async () => {
-                      setSearchQuery(q);
-                      setSearching(true); setSearchError(''); setSearchResults([]);
-                      try {
-                        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}&max_results=5`);
-                        if (res.ok) { const r = await res.json(); setSearchResults(r.results || []); if ((r.results||[]).length === 0) setSearchError('No results found.'); }
-                        else { const err = await res.json(); setSearchError(err.detail || 'Search failed.'); }
-                      } catch { setSearchError('Search unavailable. Ensure backend is running.'); }
-                      finally { setSearching(false); }
-                    }}>
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -973,7 +816,7 @@ export default function App() {
                     { emoji: '⚠️', label: 'Threshold breach',  desc: 'When temp/humidity/soil goes out of bounds' },
                     { emoji: '💧', label: 'Pump state change', desc: 'When ActuatorControlAgent triggers the pump' },
                     { emoji: '💨', label: 'Fan state change',  desc: 'When fan is triggered by high temp or humidity' },
-                    { emoji: '🌞', label: 'Lights toggled',    desc: 'When light level drops below minimum lux' },
+                    { emoji: '🌞', label: 'Grow lights toggled', desc: 'When photoresistor % crosses the plant\'s min/max light target' },
                     { emoji: '🔬', label: 'Disease detected',  desc: 'When qwen3-vl:4b finds disease in a leaf photo' },
                     { emoji: '🔑', label: 'User login',        desc: 'When someone logs into the dashboard' },
                   ].map((a, i) => (

@@ -9,7 +9,7 @@ export default function GrowthStage({
   targets, 
   onSelectPlant 
 }) {
-  const plants = ['Strawberry', 'Tomato', 'Lettuce', 'Orchid', 'Basil'];
+  const plants = ['Strawberry', 'Tomato', 'Lettuce', 'Orchid', 'Basil', 'Cactus'];
   const stages = ['Seedling', 'Vegetative', 'Flowering', 'Fruiting'];
 
   const handlePlantChange = (e) => {
@@ -133,7 +133,7 @@ export default function GrowthStage({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {renderProgress("Air Temp", sensors.temperature, targets.min_temp, targets.max_temp, "°C")}
         {renderProgress("Air Humidity", sensors.humidity, targets.min_humidity, targets.max_humidity, "%")}
-        {renderProgress("Ambient Light", sensors.light, targets.min_light, targets.max_light, " Lux")}
+        {renderProgress("Ambient Light", sensors.light, targets.min_light, targets.max_light, "%")}
         {renderProgress("Soil Moisture", sensors.soil_moisture, targets.min_soil_moisture, targets.max_soil_moisture, "%")}
       </div>
     </div>

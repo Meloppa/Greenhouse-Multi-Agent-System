@@ -75,23 +75,25 @@ class TelegramBotService:
             s = global_state.sensors
             a = global_state.actuators
             t = global_state.targets
+            esp = global_state.esp8266
             p = global_state.current_plant
             stage = global_state.growth_stage
-            
+
             pump_emoji = "🟢 ON" if a.pump else "🔴 OFF"
             fan_emoji = "🟢 ON" if a.fan else "🔴 OFF"
-            lights_emoji = "🟢 ON" if a.grow_lights else "🔴 OFF"
-            
+            lights_on = esp.led1 or esp.led2 or esp.led3
+            lights_emoji = ("🟢 ON" if lights_on else "🔴 OFF") + f" ({esp.light_mode})"
+
             # Simple bounds check representation
             health = "Exemplary ❇️"
             if s.soil_moisture < t.min_soil_moisture or s.temperature > t.max_temp:
                 health = "Needs Attention ⚠️"
-                
+
             return (
                 f"📊 *Current Greenhouse Status* ({p} - {stage})\n\n"
                 f"🌡️ Temp: {s.temperature}°C (Ideal: {t.min_temp}-{t.max_temp}°C)\n"
                 f"💧 Humidity: {s.humidity}% (Ideal: {t.min_humidity}-{t.max_humidity}%)\n"
-                f"☀️ Ambient Light: {s.light} Lux (Ideal: {t.min_light}-{t.max_light} Lux)\n"
+                f"☀️ Ambient Light: {global_state.last_light_pct}% (Ideal: {t.min_light}-{t.max_light}%)\n"
                 f"🪵 Soil Moisture: {s.soil_moisture}% (Ideal: {t.min_soil_moisture}-{t.max_soil_moisture}%)\n\n"
                 f"⚙️ *Actuators Status*:\n"
                 f"💧 Water Pump: {pump_emoji}\n"
