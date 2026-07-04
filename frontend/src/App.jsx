@@ -54,7 +54,8 @@ export default function App() {
     agent_bindings: {},
     models: {},
     search_enabled: true,
-    esp8266: { photoresistor: 0, led1: false, led2: false, led3: false, last_seen: null }
+    manual_mode: false,
+    esp8266: { photoresistor: 0, led1: false, led2: false, led3: false, led4: false, led5: false, led6: false, last_seen: null }
   });
 
   // ── Sensor sim inputs ──
@@ -153,9 +154,22 @@ export default function App() {
     try { await fetch(`${API_BASE}/actuators/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device, state }) }); fetchStatus(); } catch {}
   };
 
+  const handleToggleManualMode = async (manualMode) => {
+    setData(prev => ({ ...prev, manual_mode: manualMode }));
+    if (!backendConnected) return;
+    try {
+      await fetch(`${API_BASE}/actuators/mode`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manual_mode: manualMode })
+      });
+      fetchStatus();
+    } catch {}
+  };
+
   const handleLedControl = async (led, state) => {
     const ledUpdate = led === 'all'
-      ? { led1: state, led2: state, led3: state }
+      ? { led1: state, led2: state, led3: state, led4: state, led5: state, led6: state }
       : { [led]: state };
     setData(prev => ({ ...prev, esp8266: { ...prev.esp8266, ...ledUpdate } }));
     if (!backendConnected) return;
@@ -238,7 +252,7 @@ export default function App() {
   };
 
   const sensors  = data.sensors  || { temperature: 24, humidity: 50, light: 220, soil_moisture: 42 };
-  const esp8266  = data.esp8266  || { photoresistor: 0, led1: false, led2: false, led3: false, last_seen: null };
+  const esp8266  = data.esp8266  || { photoresistor: 0, led1: false, led2: false, led3: false, led4: false, led5: false, led6: false, last_seen: null };
 
   // ── Helpers ──
   const isInRange = (val, min, max) => val >= min && val <= max;
@@ -568,7 +582,17 @@ export default function App() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-title)' }}>Actuators</div>
                     <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>Manual override · ActuatorControlAgent</div>
                   </div>
-                  <Power size={15} color={Object.values(data.actuators).some(Boolean) ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: data.manual_mode ? 'var(--color-text-title)' : 'var(--color-text-muted)' }}>
+                      Manual Control
+                    </span>
+                    <div 
+                      style={{ width: 34, height: 19, borderRadius: 20, backgroundColor: data.manual_mode ? 'var(--color-primary)' : 'var(--color-border)', padding: 2, display: 'flex', alignItems: 'center', transition: 'background 0.2s', cursor: 'pointer' }}
+                      onClick={() => handleToggleManualMode(!data.manual_mode)}
+                    >
+                      <div style={{ width: 15, height: 15, borderRadius: '50%', backgroundColor: '#fff', transform: data.manual_mode ? 'translateX(15px)' : 'translateX(0)', transition: 'transform 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+                    </div>
+                  </div>
                 </div>
 
                 {[
@@ -593,7 +617,7 @@ export default function App() {
                 })}
 
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'center' }}>
-                  Auto-controlled by ActuatorControlAgent on sensor push
+                  {data.manual_mode ? 'Manual control active — automatic control agent paused.' : 'Auto-controlled by ActuatorControlAgent on sensor push'}
                 </div>
               </div>
 
@@ -702,15 +726,18 @@ export default function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-title)' }}>LED Control</div>
-                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>D1 · D2 · D3 GPIO pins</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>D1 · D2 · D3 · D4 · D5 · D6 GPIO pins</div>
                     </div>
-                    <Lightbulb size={18} color={[esp8266.led1, esp8266.led2, esp8266.led3].some(Boolean) ? 'var(--amber-400)' : 'var(--color-text-muted)'} />
+                    <Lightbulb size={18} color={[esp8266.led1, esp8266.led2, esp8266.led3, esp8266.led4, esp8266.led5, esp8266.led6].some(Boolean) ? 'var(--amber-400)' : 'var(--color-text-muted)'} />
                   </div>
 
                   {[
                     { key: 'led1', label: 'LED D1', sub: 'GPIO5 (D1)' },
                     { key: 'led2', label: 'LED D2', sub: 'GPIO4 (D2)' },
                     { key: 'led3', label: 'LED D3', sub: 'GPIO0 (D3)' },
+                    { key: 'led4', label: 'LED D4', sub: 'GPIO2 (D4)' },
+                    { key: 'led5', label: 'LED D5', sub: 'GPIO14 (D5)' },
+                    { key: 'led6', label: 'LED D6', sub: 'GPIO12 (D6)' },
                   ].map(led => {
                     const on = esp8266[led.key];
                     return (

@@ -18,8 +18,8 @@
 #include <WiFiClient.h>
 
 // ── Configuration ─────────────────────────────────────────────────────────────
-const char* ssid         = "FREAKY";
-const char* password     = "anasbabi";
+const char* ssid         = "mel";
+const char* password     = "amincomel";
 
 const char* BACKEND_IP   = "192.168.137.1";  // Windows Mobile Hotspot fixed IP
 const int   BACKEND_PORT = 8000;
@@ -31,11 +31,17 @@ const int PHOTO_PIN = A0;
 const int LED_D1    = 5;   // GPIO5 (D1)
 const int LED_D2    = 4;   // GPIO4 (D2)
 const int LED_D3    = 0;   // GPIO0 (D3) — keep LOW at boot
+const int LED_D4    = 2;   // GPIO2 (D4) — caution: boot pin
+const int LED_D5    = 14;  // GPIO14 (D5)
+const int LED_D6    = 12;  // GPIO12 (D6)
 
 // ── State ─────────────────────────────────────────────────────────────────────
 bool led1_state          = false;
 bool led2_state          = false;
 bool led3_state          = false;
+bool led4_state          = false;
+bool led5_state          = false;
+bool led6_state          = false;
 int  photoresistor_value = 0;
 
 unsigned long lastPushMs = 0;
@@ -61,7 +67,10 @@ String buildSensorPayload() {
   j += "\"photoresistor\":"  + String(photoresistor_value)             + ",";
   j += "\"led1\":"           + String(led1_state ? "true" : "false")   + ",";
   j += "\"led2\":"           + String(led2_state ? "true" : "false")   + ",";
-  j += "\"led3\":"           + String(led3_state ? "true" : "false");
+  j += "\"led3\":"           + String(led3_state ? "true" : "false")   + ",";
+  j += "\"led4\":"           + String(led4_state ? "true" : "false")   + ",";
+  j += "\"led5\":"           + String(led5_state ? "true" : "false")   + ",";
+  j += "\"led6\":"           + String(led6_state ? "true" : "false");
   j += "}";
   return j;
 }
@@ -84,6 +93,9 @@ void setLed(int led, bool state) {
   if (led == 1 || led == 0) { led1_state = state; digitalWrite(LED_D1, state ? HIGH : LOW); }
   if (led == 2 || led == 0) { led2_state = state; digitalWrite(LED_D2, state ? HIGH : LOW); }
   if (led == 3 || led == 0) { led3_state = state; digitalWrite(LED_D3, state ? HIGH : LOW); }
+  if (led == 4 || led == 0) { led4_state = state; digitalWrite(LED_D4, state ? HIGH : LOW); }
+  if (led == 5 || led == 0) { led5_state = state; digitalWrite(LED_D5, state ? HIGH : LOW); }
+  if (led == 6 || led == 0) { led6_state = state; digitalWrite(LED_D6, state ? HIGH : LOW); }
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -94,6 +106,9 @@ void setup() {
   pinMode(LED_D1, OUTPUT); digitalWrite(LED_D1, LOW);
   pinMode(LED_D2, OUTPUT); digitalWrite(LED_D2, LOW);
   pinMode(LED_D3, OUTPUT); digitalWrite(LED_D3, LOW);
+  pinMode(LED_D4, OUTPUT); digitalWrite(LED_D4, LOW);
+  pinMode(LED_D5, OUTPUT); digitalWrite(LED_D5, LOW);
+  pinMode(LED_D6, OUTPUT); digitalWrite(LED_D6, LOW);
 
   Serial.println("\n\nZentra Flora — ESP8266 Node starting...");
   connectToWiFi();
@@ -108,6 +123,12 @@ void setup() {
   server.on("/led2/off",    []() { setLed(2, false); server.send(200, "text/plain", "LED D2 OFF");   Serial.println("[Local] LED D2 OFF");   });
   server.on("/led3/on",     []() { setLed(3, true);  server.send(200, "text/plain", "LED D3 ON");    Serial.println("[Local] LED D3 ON");    });
   server.on("/led3/off",    []() { setLed(3, false); server.send(200, "text/plain", "LED D3 OFF");   Serial.println("[Local] LED D3 OFF");   });
+  server.on("/led4/on",     []() { setLed(4, true);  server.send(200, "text/plain", "LED D4 ON");    Serial.println("[Local] LED D4 ON");    });
+  server.on("/led4/off",    []() { setLed(4, false); server.send(200, "text/plain", "LED D4 OFF");   Serial.println("[Local] LED D4 OFF");   });
+  server.on("/led5/on",     []() { setLed(5, true);  server.send(200, "text/plain", "LED D5 ON");    Serial.println("[Local] LED D5 ON");    });
+  server.on("/led5/off",    []() { setLed(5, false); server.send(200, "text/plain", "LED D5 OFF");   Serial.println("[Local] LED D5 OFF");   });
+  server.on("/led6/on",     []() { setLed(6, true);  server.send(200, "text/plain", "LED D6 ON");    Serial.println("[Local] LED D6 ON");    });
+  server.on("/led6/off",    []() { setLed(6, false); server.send(200, "text/plain", "LED D6 OFF");   Serial.println("[Local] LED D6 OFF");   });
   server.on("/led/all/on",  []() { setLed(0, true);  server.send(200, "text/plain", "All LEDs ON");  Serial.println("[Local] All LEDs ON");  });
   server.on("/led/all/off", []() { setLed(0, false); server.send(200, "text/plain", "All LEDs OFF"); Serial.println("[Local] All LEDs OFF"); });
 
@@ -158,13 +179,19 @@ void pushToBackend() {
     bool d1 = parseJsonBool(response, "led1", led1_state);
     bool d2 = parseJsonBool(response, "led2", led2_state);
     bool d3 = parseJsonBool(response, "led3", led3_state);
+    bool d4 = parseJsonBool(response, "led4", led4_state);
+    bool d5 = parseJsonBool(response, "led5", led5_state);
+    bool d6 = parseJsonBool(response, "led6", led6_state);
 
     if (d1 != led1_state) { setLed(1, d1); Serial.printf("[Backend] LED D1 -> %s\n", d1 ? "ON" : "OFF"); }
     if (d2 != led2_state) { setLed(2, d2); Serial.printf("[Backend] LED D2 -> %s\n", d2 ? "ON" : "OFF"); }
     if (d3 != led3_state) { setLed(3, d3); Serial.printf("[Backend] LED D3 -> %s\n", d3 ? "ON" : "OFF"); }
+    if (d4 != led4_state) { setLed(4, d4); Serial.printf("[Backend] LED D4 -> %s\n", d4 ? "ON" : "OFF"); }
+    if (d5 != led5_state) { setLed(5, d5); Serial.printf("[Backend] LED D5 -> %s\n", d5 ? "ON" : "OFF"); }
+    if (d6 != led6_state) { setLed(6, d6); Serial.printf("[Backend] LED D6 -> %s\n", d6 ? "ON" : "OFF"); }
 
-    Serial.printf("[Backend] Photo=%4d  L1=%d L2=%d L3=%d\n",
-      photoresistor_value, led1_state, led2_state, led3_state);
+    Serial.printf("[Backend] Photo=%4d  L1=%d L2=%d L3=%d L4=%d L5=%d L6=%d\n",
+      photoresistor_value, led1_state, led2_state, led3_state, led4_state, led5_state, led6_state);
 
   } else if (httpCode < 0) {
     Serial.printf("[Backend] Connection error: %s\n", http.errorToString(httpCode).c_str());
@@ -233,6 +260,9 @@ void handleRoot() {
   html += "<div>D1 (GPIO5)&nbsp;<button class='btn-on' onclick=\"fetch('/led1/on')\">ON</button><button class='btn-off' onclick=\"fetch('/led1/off')\">OFF</button></div><br>";
   html += "<div>D2 (GPIO4)&nbsp;<button class='btn-on' onclick=\"fetch('/led2/on')\">ON</button><button class='btn-off' onclick=\"fetch('/led2/off')\">OFF</button></div><br>";
   html += "<div>D3 (GPIO0)&nbsp;<button class='btn-on' onclick=\"fetch('/led3/on')\">ON</button><button class='btn-off' onclick=\"fetch('/led3/off')\">OFF</button></div><br>";
+  html += "<div>D4 (GPIO2)&nbsp;<button class='btn-on' onclick=\"fetch('/led4/on')\">ON</button><button class='btn-off' onclick=\"fetch('/led4/off')\">OFF</button></div><br>";
+  html += "<div>D5 (GPIO14)&nbsp;<button class='btn-on' onclick=\"fetch('/led5/on')\">ON</button><button class='btn-off' onclick=\"fetch('/led5/off')\">OFF</button></div><br>";
+  html += "<div>D6 (GPIO12)&nbsp;<button class='btn-on' onclick=\"fetch('/led6/on')\">ON</button><button class='btn-off' onclick=\"fetch('/led6/off')\">OFF</button></div><br>";
   html += "<hr style='border-color:#374151'>";
   html += "<button class='btn-all-on' onclick=\"fetch('/led/all/on')\">ALL ON</button>";
   html += "<button class='btn-all-off' onclick=\"fetch('/led/all/off')\">ALL OFF</button></div>";
@@ -258,6 +288,9 @@ void handleStatus() {
   json += "\"led1\":"           + String(led1_state ? "true" : "false")   + ",";
   json += "\"led2\":"           + String(led2_state ? "true" : "false")   + ",";
   json += "\"led3\":"           + String(led3_state ? "true" : "false")   + ",";
+  json += "\"led4\":"           + String(led4_state ? "true" : "false")   + ",";
+  json += "\"led5\":"           + String(led5_state ? "true" : "false")   + ",";
+  json += "\"led6\":"           + String(led6_state ? "true" : "false")   + ",";
   json += "\"ip\":\""           + WiFi.localIP().toString()               + "\"";
   json += "}";
   server.send(200, "application/json", json);
