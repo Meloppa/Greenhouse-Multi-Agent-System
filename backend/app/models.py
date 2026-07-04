@@ -29,6 +29,13 @@ class ActuatorState(BaseModel):
     fan: bool = False
     grow_lights: bool = False
 
+class ESP8266State(BaseModel):
+    photoresistor: int = 0
+    led1: bool = False
+    led2: bool = False
+    led3: bool = False
+    last_seen: Optional[str] = None
+
 class ChatMessage(BaseModel):
     sender: str  # "User", "Bot", "System"
     message: str
@@ -52,6 +59,7 @@ class SystemState(BaseModel):
         min_soil_moisture=50.0, max_soil_moisture=70.0
     ))
     actuators: ActuatorState = Field(default_factory=ActuatorState)
+    esp8266: ESP8266State = Field(default_factory=ESP8266State)
     sensor_history: List[Dict[str, Any]] = Field(default_factory=list)
     chat_history: List[ChatMessage] = Field(default_factory=list)
     alerts_history: List[AlertNotification] = Field(default_factory=list)
