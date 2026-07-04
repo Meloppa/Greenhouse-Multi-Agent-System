@@ -22,8 +22,8 @@
 #include <DHT.h>
 
 // ── Configuration ─────────────────────────────────────────────────────────────
-const char* ssid         = "FREAKY";
-const char* password     = "anasbabi";
+const char* ssid         = "mel";
+const char* password     = "amincomel";
 
 const char* BACKEND_IP   = "192.168.137.1";
 const int   BACKEND_PORT = 8000;

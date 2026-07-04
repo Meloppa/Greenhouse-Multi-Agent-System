@@ -60,7 +60,7 @@ class ActuatorControlAgent:
     @staticmethod
     def process_light(photoresistor: int, targets: TargetSettings, esp8266: ESP8266State) -> Tuple[ESP8266State, int, List[Dict[str, Any]]]:
         """Derives a 0-100% light level from the photoresistor and, when in
-        auto mode, drives the 3 LED channels to keep it within the selected
+        auto mode, drives all 6 LED channels to keep it within the selected
         plant's target range. Manual mode leaves LED state untouched."""
         light_pct = round(photoresistor / 1023 * 100)
 
@@ -69,6 +69,9 @@ class ActuatorControlAgent:
             led1=esp8266.led1,
             led2=esp8266.led2,
             led3=esp8266.led3,
+            led4=esp8266.led4,
+            led5=esp8266.led5,
+            led6=esp8266.led6,
             light_mode=esp8266.light_mode,
             last_seen=esp8266.last_seen
         )
@@ -77,12 +80,14 @@ class ActuatorControlAgent:
         if new_state.light_mode != "auto":
             return new_state, light_pct, logs
 
-        all_on = new_state.led1 and new_state.led2 and new_state.led3
-        any_on = new_state.led1 or new_state.led2 or new_state.led3
+        leds = (new_state.led1, new_state.led2, new_state.led3, new_state.led4, new_state.led5, new_state.led6)
+        all_on = all(leds)
+        any_on = any(leds)
 
         if light_pct < targets.min_light:
             if not all_on:
                 new_state.led1 = new_state.led2 = new_state.led3 = True
+                new_state.led4 = new_state.led5 = new_state.led6 = True
                 logs.append({
                     "device": "Grow Lights",
                     "action": "Activated",
@@ -91,6 +96,7 @@ class ActuatorControlAgent:
         elif light_pct >= targets.max_light:
             if any_on:
                 new_state.led1 = new_state.led2 = new_state.led3 = False
+                new_state.led4 = new_state.led5 = new_state.led6 = False
                 logs.append({
                     "device": "Grow Lights",
                     "action": "Deactivated",

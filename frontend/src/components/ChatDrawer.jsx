@@ -2,16 +2,20 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Leaf, Globe, AlertCircle, Search, X } from 'lucide-react';
 
 const SYSTEM_COMMANDS = [
-  { cmd: '/status',     desc: 'Full greenhouse status report' },
-  { cmd: '/temp',       desc: 'Current air temperature' },
-  { cmd: '/humidity',   desc: 'Current humidity reading' },
-  { cmd: '/soil',       desc: 'Soil moisture level' },
-  { cmd: '/light',      desc: 'Light intensity (%)' },
-  { cmd: '/tasks',      desc: "Today's agri task list" },
-  { cmd: '/pump_on',    desc: 'Manually activate water pump' },
-  { cmd: '/pump_off',   desc: 'Deactivate water pump' },
-  { cmd: '/fan_on',     desc: 'Activate ventilation fan' },
-  { cmd: '/fan_off',    desc: 'Deactivate ventilation fan' },
+  { cmd: '/status',      desc: 'Full greenhouse status report' },
+  { cmd: '/temp',        desc: 'Current air temperature' },
+  { cmd: '/humidity',    desc: 'Current humidity reading' },
+  { cmd: '/soil',        desc: 'Soil moisture level' },
+  { cmd: '/light',       desc: 'Light intensity (%)' },
+  { cmd: '/tasks',       desc: "Today's agri task list" },
+  { cmd: '/pump_on',     desc: 'Manually activate water pump' },
+  { cmd: '/pump_off',    desc: 'Deactivate water pump' },
+  { cmd: '/fan_on',      desc: 'Activate ventilation fan' },
+  { cmd: '/fan_off',     desc: 'Deactivate ventilation fan' },
+  { cmd: '/led1_on',     desc: 'Turn on LED D1' },
+  { cmd: '/led1_off',    desc: 'Turn off LED D1' },
+  { cmd: '/led_all_on',  desc: 'Turn on all LEDs' },
+  { cmd: '/led_all_off', desc: 'Turn off all LEDs' },
 ];
 
 export default function ChatDrawer({ chatHistory, onSendChatMessage, searchEnabled }) {
@@ -193,7 +197,7 @@ export default function ChatDrawer({ chatHistory, onSendChatMessage, searchEnabl
       }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-title)' }}>Commands</div>
         <p style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5, margin: 0 }}>
-          Click any command to send it, or use via Telegram @melmalebot.
+          Click any command to send it directly to the Greenhouse Assistant.
         </p>
 
         {searchEnabled && (

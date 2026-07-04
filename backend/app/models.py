@@ -33,6 +33,9 @@ class ESP8266State(BaseModel):
     led1: bool = False
     led2: bool = False
     led3: bool = False
+    led4: bool = False
+    led5: bool = False
+    led6: bool = False
     light_mode: str = "auto"  # "auto" | "manual"
     last_seen: Optional[str] = None
 
@@ -51,6 +54,7 @@ class SystemState(BaseModel):
     current_plant: str = "Strawberry"
     growth_stage: str = "Fruiting"
     age_days: int = 45
+    manual_mode: bool = False
     sensors: SensorReading = Field(default_factory=lambda: SensorReading(temperature=24.5, humidity=65.0, light=45.0, soil_moisture=42.0, timestamp=datetime.now().strftime("%I:%M:%S %p")))
     targets: TargetSettings = Field(default_factory=lambda: TargetSettings(
         min_temp=18.0, max_temp=26.0,
