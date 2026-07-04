@@ -127,6 +127,7 @@ async def get_system_status():
         "telegram_chat_id_set": bool(TELEGRAM_CHAT_ID and TELEGRAM_CHAT_ID != "your_chat_id_here"),
         "last_seen_chat_id": global_state.last_seen_chat_id,
         "search_enabled": SEARCH_ENABLED,
+        "manual_mode": global_state.manual_mode,
         "esp8266": global_state.esp8266
     }
 
@@ -240,21 +241,20 @@ async def update_sensor_readings(reading: SensorReading):
         sb_thread = threading.Thread(target=push_to_supabase_worker, args=(reading,), daemon=True)
         sb_thread.start()
 
-    # 3. Invoke Actuator Control Agent
-    prev_pump = global_state.actuators.pump
-    prev_fan = global_state.actuators.fan
+    # 3. Invoke Actuator Control Agent (if not in manual mode)
+    logs = []
+    if not global_state.manual_mode:
+        new_actuators, logs = ActuatorControlAgent.process_readings(
+            reading, global_state.targets, global_state.actuators
+        )
+        global_state.actuators = new_actuators
 
-    new_actuators, logs = ActuatorControlAgent.process_readings(
-        reading, global_state.targets, global_state.actuators
-    )
-    global_state.actuators = new_actuators
-
-    # 4. Dispatch Telegram and Email Alerts on hardware activation or threshold warnings
-    for log in logs:
-        subject = f"Hardware State Change: {log['device']} {log['action']}"
-        body_msg = f"The {log['device']} was {log['action'].lower()} automatically. Reason: {log['reason']}."
-        TelegramBotService.send_alert(f"⚠️ *{subject}*\n{body_msg}")
-        EmailService.send_alert(subject, body_msg)
+        # 4. Dispatch Telegram and Email Alerts on hardware activation or threshold warnings
+        for log in logs:
+            subject = f"Hardware State Change: {log['device']} {log['action']}"
+            body_msg = f"The {log['device']} was {log['action'].lower()} automatically. Reason: {log['reason']}."
+            TelegramBotService.send_alert(f"⚠️ *{subject}*\n{body_msg}")
+            EmailService.send_alert(subject, body_msg)
 
     return {
         "status": "Success",
@@ -433,6 +433,30 @@ async def send_chat_message(payload: Dict[str, Any]):
         timestamp=timestamp
     ))
 
+    # Intercept direct hardware commands to bypass LLM and execute immediately
+    cleaned_msg = msg_text.strip().lower()
+    is_command = msg_text.startswith("/") or \
+                 any(k in cleaned_msg for k in ["pump on", "pump off", "fan on", "fan off"]) or \
+                 any(f"led{i}" in cleaned_msg.replace(" ", "") for i in range(1, 7)) or \
+                 "all led" in cleaned_msg or "all leds" in cleaned_msg
+
+    if is_command:
+        from app.services.telegram_bot import TelegramBotService
+        reply_text = TelegramBotService.process_incoming_message(msg_text)
+        
+        global_state.chat_history.append(ChatMessage(
+            sender="Bot",
+            message=reply_text,
+            timestamp=timestamp
+        ))
+        
+        return {
+            "user_message": msg_text,
+            "bot_reply": reply_text,
+            "search_used": False,
+            "search_results": []
+        }
+
     # ── Step 1: Check if web search is warranted ──
     search_context = ""
     search_results = []
@@ -554,6 +578,16 @@ async def toggle_actuator(payload: Dict[str, Any]):
     return {"status": "Updated", "actuators": global_state.actuators}
 
 
+@app.post("/api/actuators/mode")
+async def toggle_actuator_mode(payload: Dict[str, Any]):
+    """Sets whether the system is in manual override mode or automatic mode."""
+    manual_mode = bool(payload.get("manual_mode", False))
+    global_state.manual_mode = manual_mode
+    mode_str = "Manual" if manual_mode else "Automatic"
+    TelegramBotService.send_alert(f"🔧 System Control Mode changed to {mode_str}.")
+    return {"status": "Updated", "manual_mode": global_state.manual_mode}
+
+
 # ─── ESP8266 HARDWARE ENDPOINTS ─────────────────────────────────────────────
 
 @app.post("/api/esp8266/sensor")
@@ -570,7 +604,10 @@ async def esp8266_sensor_push(payload: Dict[str, Any]):
         "status": "OK",
         "led1": global_state.esp8266.led1,
         "led2": global_state.esp8266.led2,
-        "led3": global_state.esp8266.led3
+        "led3": global_state.esp8266.led3,
+        "led4": global_state.esp8266.led4,
+        "led5": global_state.esp8266.led5,
+        "led6": global_state.esp8266.led6
     }
 
 
@@ -578,7 +615,7 @@ async def esp8266_sensor_push(payload: Dict[str, Any]):
 async def esp8266_led_control(payload: Dict[str, Any]):
     """Sets desired LED state from the dashboard.
     The ESP8266 receives the new state on its next sensor push (≤2 s latency)."""
-    led   = payload.get("led")    # "led1" | "led2" | "led3" | "all"
+    led   = payload.get("led")    # "led1" | "led2" | "led3" | "led4" | "led5" | "led6" | "all"
     state = bool(payload.get("state", False))
 
     if led == "led1":
@@ -587,12 +624,21 @@ async def esp8266_led_control(payload: Dict[str, Any]):
         global_state.esp8266.led2 = state
     elif led == "led3":
         global_state.esp8266.led3 = state
+    elif led == "led4":
+        global_state.esp8266.led4 = state
+    elif led == "led5":
+        global_state.esp8266.led5 = state
+    elif led == "led6":
+        global_state.esp8266.led6 = state
     elif led == "all":
         global_state.esp8266.led1 = state
         global_state.esp8266.led2 = state
         global_state.esp8266.led3 = state
+        global_state.esp8266.led4 = state
+        global_state.esp8266.led5 = state
+        global_state.esp8266.led6 = state
     else:
-        raise HTTPException(status_code=400, detail="Invalid LED. Use led1, led2, led3, or all")
+        raise HTTPException(status_code=400, detail="Invalid LED. Use led1-led6, or all")
 
     action = "ON" if state else "OFF"
     label  = led.upper() if led != "all" else "All LEDs"
@@ -602,7 +648,10 @@ async def esp8266_led_control(payload: Dict[str, Any]):
         "status": "OK",
         "led1": global_state.esp8266.led1,
         "led2": global_state.esp8266.led2,
-        "led3": global_state.esp8266.led3
+        "led3": global_state.esp8266.led3,
+        "led4": global_state.esp8266.led4,
+        "led5": global_state.esp8266.led5,
+        "led6": global_state.esp8266.led6
     }
 
 
