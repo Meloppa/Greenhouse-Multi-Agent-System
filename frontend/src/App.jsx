@@ -53,7 +53,8 @@ export default function App() {
     active_model: 'gemma3:1b',
     agent_bindings: {},
     models: {},
-    search_enabled: true
+    search_enabled: true,
+    esp8266: { photoresistor: 0, led1: false, led2: false, led3: false, last_seen: null }
   });
 
   // ── Sensor sim inputs ──
@@ -152,6 +153,18 @@ export default function App() {
     try { await fetch(`${API_BASE}/actuators/toggle`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device, state }) }); fetchStatus(); } catch {}
   };
 
+  const handleLedControl = async (led, state) => {
+    const ledUpdate = led === 'all'
+      ? { led1: state, led2: state, led3: state }
+      : { [led]: state };
+    setData(prev => ({ ...prev, esp8266: { ...prev.esp8266, ...ledUpdate } }));
+    if (!backendConnected) return;
+    try {
+      await fetch(`${API_BASE}/esp8266/led`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ led, state }) });
+      fetchStatus();
+    } catch {}
+  };
+
   const handleSimPush = async () => {
     setSimSending(true); setSimResult(null);
     if (!backendConnected) { setTimeout(() => { setSimSending(false); setSimResult({ ok: true, actions: [] }); }, 600); return; }
@@ -224,7 +237,8 @@ export default function App() {
     finally { setSearching(false); }
   };
 
-  const sensors = data.sensors || { temperature: 24, humidity: 50, light: 220, soil_moisture: 42 };
+  const sensors  = data.sensors  || { temperature: 24, humidity: 50, light: 220, soil_moisture: 42 };
+  const esp8266  = data.esp8266  || { photoresistor: 0, led1: false, led2: false, led3: false, last_seen: null };
 
   // ── Helpers ──
   const isInRange = (val, min, max) => val >= min && val <= max;
@@ -619,6 +633,119 @@ export default function App() {
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* ── ESP8266 Hardware Section ── */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <Wifi size={14} color="var(--color-text-muted)" />
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ESP8266 Hardware Node</span>
+                <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 20, border: '1px solid var(--color-border)',
+                  color: esp8266.last_seen ? 'var(--color-success)' : 'var(--color-text-muted)',
+                  backgroundColor: esp8266.last_seen ? 'var(--color-success-light)' : 'var(--color-bg-base)' }}>
+                  {esp8266.last_seen ? 'Connected' : 'No Signal'}
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+
+                {/* Photoresistor card */}
+                <div className="zentra-card hardware-glow-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-title)' }}>Photoresistor</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>A0 · Real-time ADC reading</div>
+                    </div>
+                    <Sun size={18} color="var(--amber-400)" />
+                  </div>
+
+                  <div style={{ textAlign: 'center', padding: '10px 0 6px' }}>
+                    <div style={{ fontSize: 38, fontWeight: 800, color: 'var(--color-text-title)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+                      {esp8266.photoresistor}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>/ 1023 raw ADC</div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 5 }}>
+                      <span>Dark</span>
+                      <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+                        {Math.round(esp8266.photoresistor / 1023 * 100)}% light
+                      </span>
+                      <span>Bright</span>
+                    </div>
+                    <div style={{ height: 8, backgroundColor: 'var(--color-bg-base)', borderRadius: 4, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${Math.round(esp8266.photoresistor / 1023 * 100)}%`,
+                        background: 'linear-gradient(90deg, #166534, #4ade80)',
+                        borderRadius: 4,
+                        transition: 'width 0.6s ease'
+                      }} />
+                    </div>
+                  </div>
+
+                  {esp8266.last_seen ? (
+                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textAlign: 'right' }}>
+                      Last push: {esp8266.last_seen}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textAlign: 'center' }}>
+                      Waiting for ESP8266 push…
+                    </div>
+                  )}
+                </div>
+
+                {/* LED Control card */}
+                <div className="zentra-card hardware-glow-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-title)' }}>LED Control</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>D1 · D2 · D3 GPIO pins</div>
+                    </div>
+                    <Lightbulb size={18} color={[esp8266.led1, esp8266.led2, esp8266.led3].some(Boolean) ? 'var(--amber-400)' : 'var(--color-text-muted)'} />
+                  </div>
+
+                  {[
+                    { key: 'led1', label: 'LED D1', sub: 'GPIO5 (D1)' },
+                    { key: 'led2', label: 'LED D2', sub: 'GPIO4 (D2)' },
+                    { key: 'led3', label: 'LED D3', sub: 'GPIO0 (D3)' },
+                  ].map(led => {
+                    const on = esp8266[led.key];
+                    return (
+                      <div key={led.key}
+                        className={`actuator-row-interactive ${on ? 'active' : ''}`}
+                        onClick={() => handleLedControl(led.key, !on)}>
+                        <div className="actuator-icon-circle">
+                          <div style={{
+                            width: 10, height: 10, borderRadius: '50%',
+                            backgroundColor: on ? 'var(--amber-400)' : 'var(--color-border)',
+                            transition: 'background 0.2s, box-shadow 0.2s',
+                            boxShadow: on ? '0 0 7px var(--amber-400)' : 'none'
+                          }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-title)' }}>{led.label}</div>
+                          <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 1 }}>{led.sub}</div>
+                        </div>
+                        <div style={{ width: 34, height: 19, borderRadius: 20, backgroundColor: on ? 'var(--color-primary)' : 'var(--color-border)', padding: 2, display: 'flex', alignItems: 'center', transition: 'background 0.2s', flexShrink: 0 }}>
+                          <div style={{ width: 15, height: 15, borderRadius: '50%', backgroundColor: '#fff', transform: on ? 'translateX(15px)' : 'translateX(0)', transition: 'transform 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => handleLedControl('all', true)} className="zentra-btn" style={{ flex: 1, fontSize: 12, padding: '8px 12px' }}>
+                      <Lightbulb size={12} /> All ON
+                    </button>
+                    <button onClick={() => handleLedControl('all', false)} className="zentra-btn-secondary" style={{ flex: 1, fontSize: 12, padding: '8px 12px' }}>
+                      All OFF
+                    </button>
+                  </div>
+                </div>
+
               </div>
             </div>
           </div>

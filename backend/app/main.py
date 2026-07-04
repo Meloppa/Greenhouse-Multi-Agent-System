@@ -13,7 +13,7 @@ from typing import Dict, Any, List
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 
-from app.models import global_state, SensorReading, PlantSelection, ActuatorState, ChatMessage
+from app.models import global_state, SensorReading, PlantSelection, ActuatorState, ChatMessage, ESP8266State
 from app.agents.plant_expert import PlantExpertAgent
 from app.agents.scheduler import TaskSchedulerAgent
 from app.agents.diagnostics import DiagnosticsAgent
@@ -126,7 +126,8 @@ async def get_system_status():
         "is_telegram_configured": IS_TELEGRAM_CONFIGURED,
         "telegram_chat_id_set": bool(TELEGRAM_CHAT_ID and TELEGRAM_CHAT_ID != "your_chat_id_here"),
         "last_seen_chat_id": global_state.last_seen_chat_id,
-        "search_enabled": SEARCH_ENABLED
+        "search_enabled": SEARCH_ENABLED,
+        "esp8266": global_state.esp8266
     }
 
 @app.post("/api/model/select")
@@ -551,6 +552,58 @@ async def toggle_actuator(payload: Dict[str, Any]):
         raise HTTPException(status_code=400, detail="Invalid hardware device")
 
     return {"status": "Updated", "actuators": global_state.actuators}
+
+
+# ─── ESP8266 HARDWARE ENDPOINTS ─────────────────────────────────────────────
+
+@app.post("/api/esp8266/sensor")
+async def esp8266_sensor_push(payload: Dict[str, Any]):
+    """Receives photoresistor reading from ESP8266 every ~2 s.
+    Returns current desired LED states so the ESP8266 can apply them immediately."""
+    photoresistor = payload.get("photoresistor", 0)
+    timestamp = datetime.now().strftime("%I:%M:%S %p")
+
+    global_state.esp8266.photoresistor = int(photoresistor)
+    global_state.esp8266.last_seen = timestamp
+
+    return {
+        "status": "OK",
+        "led1": global_state.esp8266.led1,
+        "led2": global_state.esp8266.led2,
+        "led3": global_state.esp8266.led3
+    }
+
+
+@app.post("/api/esp8266/led")
+async def esp8266_led_control(payload: Dict[str, Any]):
+    """Sets desired LED state from the dashboard.
+    The ESP8266 receives the new state on its next sensor push (≤2 s latency)."""
+    led   = payload.get("led")    # "led1" | "led2" | "led3" | "all"
+    state = bool(payload.get("state", False))
+
+    if led == "led1":
+        global_state.esp8266.led1 = state
+    elif led == "led2":
+        global_state.esp8266.led2 = state
+    elif led == "led3":
+        global_state.esp8266.led3 = state
+    elif led == "all":
+        global_state.esp8266.led1 = state
+        global_state.esp8266.led2 = state
+        global_state.esp8266.led3 = state
+    else:
+        raise HTTPException(status_code=400, detail="Invalid LED. Use led1, led2, led3, or all")
+
+    action = "ON" if state else "OFF"
+    label  = led.upper() if led != "all" else "All LEDs"
+    TelegramBotService.send_alert(f"💡 ESP8266 {label} turned {action} via dashboard.")
+
+    return {
+        "status": "OK",
+        "led1": global_state.esp8266.led1,
+        "led2": global_state.esp8266.led2,
+        "led3": global_state.esp8266.led3
+    }
 
 
 # In-memory user database preloaded with a default developer credentials profile for offline testability.
