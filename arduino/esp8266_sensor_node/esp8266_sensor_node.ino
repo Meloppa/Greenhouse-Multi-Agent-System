@@ -1,7 +1,7 @@
 /*
  * ESP8266 Greenhouse Sensor Node — Zentra Flora
  * ──────────────────────────────────────────────
- * Soil Moisture : A0   (ADC, 0–1023  →  0–100 % wet)
+ * Soil Moisture : A0   (ADC, 0–1023 raw — backend converts to 0–100 % wet)
  * DHT11/22      : D1   (GPIO5)
  * Water Pump    : D5   (GPIO14)  — relay / MOSFET, active HIGH
  * Fan           : D2   (GPIO4)   — relay / MOSFET, active HIGH
@@ -159,7 +159,7 @@ void pushToBackend() {
   payload += "\"temperature\":"   + String(temperature, 1) + ",";
   payload += "\"humidity\":"      + String(humidity, 1)    + ",";
   payload += "\"light\":"         + String(0.0, 1)         + ",";
-  payload += "\"soil_moisture\":" + String(soil_pct);
+  payload += "\"soil_moisture\":" + String(soil_raw);  // raw ADC (0-1023) — backend converts to %
   payload += "}";
 
   int httpCode = http.POST(payload);

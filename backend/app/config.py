@@ -36,6 +36,12 @@ SCHEDULER_MODEL = os.getenv("SCHEDULER_MODEL", "llama3.2:1b")
 # Web Search Tool
 SEARCH_ENABLED = os.getenv("SEARCH_ENABLED", "true").lower() == "true"
 
+# Soil Moisture Sensor Calibration
+# The ESP8266 sends the raw analog ADC reading (0-1023); the backend converts
+# it to a 0-100% wetness value using these two reference points.
+SOIL_RAW_DRY = int(os.getenv("SOIL_RAW_DRY", "1023"))  # ADC reading in dry air  -> 0%
+SOIL_RAW_WET = int(os.getenv("SOIL_RAW_WET", "0"))     # ADC reading submerged  -> 100%
+
 # JWT Authentication
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "zentra-flora-insecure-fallback-key-change-me")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")

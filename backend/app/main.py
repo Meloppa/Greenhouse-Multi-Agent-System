@@ -28,7 +28,8 @@ from app.model_config import (
 from app.config import (
     SUPABASE_URL, SUPABASE_KEY, IS_SUPABASE_CONFIGURED,
     IS_TELEGRAM_CONFIGURED, TELEGRAM_CHAT_ID, SEARCH_ENABLED,
-    JWT_SECRET_KEY, JWT_ALGORITHM, JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+    JWT_SECRET_KEY, JWT_ALGORITHM, JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
+    SOIL_RAW_DRY, SOIL_RAW_WET
 )
 import threading
 import requests
@@ -216,11 +217,21 @@ CREATE TABLE sensor_readings (
         print(f"[Supabase Push Error]: Network or connection failed - {str(e)}")
 
 
+def soil_raw_to_percent(raw: float) -> float:
+    """Converts a raw ESP8266 analog soil moisture reading (ADC 0-1023) into a 0-100% wetness value."""
+    span = SOIL_RAW_DRY - SOIL_RAW_WET
+    pct = (SOIL_RAW_DRY - raw) * 100.0 / span
+    return round(max(0.0, min(100.0, pct)), 1)
+
+
 @app.post("/api/sensors")
 async def update_sensor_readings(reading: SensorReading):
     """Receives JSON data from IoT sensors, evaluates thresholds, actuates components, and triggers alarms."""
     timestamp = datetime.now().strftime("%I:%M:%S %p")
     reading.timestamp = timestamp
+
+    # The ESP8266 sends the raw ADC value (e.g. 1000); convert it to a 0-100% wetness reading here.
+    reading.soil_moisture = soil_raw_to_percent(reading.soil_moisture)
 
     # 1. Update live reading
     global_state.sensors = reading
